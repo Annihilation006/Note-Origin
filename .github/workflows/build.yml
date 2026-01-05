@@ -23,23 +23,24 @@ jobs:
           libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
           zlib1g-dev libgstreamer1.0-dev libunwind-dev unzip wget curl jq
 
-    - name: Setup Swift and Android SDK
+    - name: Setup Swiftly and Android SDK
       run: |
-        # 1. 下载并初始化 Swiftly (非交互模式)
+        # 1. 安装 Swiftly
         curl -L -O https://download.swift.org/swiftly/linux/swiftly-x86_64.tar.gz
         tar zxf swiftly-x86_64.tar.gz
         ./swiftly init --quiet-shell-followup --no-modify-profile
         
-        # 2. 强制注入全局路径 (解决图1、图2的 command not found)
+        # 2. 注入全局路径 (解决之前截图中的 command not found)
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
         
-        # 3. 加载环境并安装工具链 (解决图3的 env.bash 找不到)
         export PATH="$HOME/.local/bin:$PATH"
         source "$HOME/.local/share/swiftly/env.sh"
+        
+        # 3. 安装工具链
         swiftly install latest --assume-yes
         
-        # 4. 安装 Android SDK Bundle (包含 Checksum 验证)
+        # 4. 安装 Android SDK (解决 Checksum 报错)
         swift sdk install \
           https://download.swift.org/swift-6.3-branch/android-sdk/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz \
           --checksum ca7cc00ca7483cbb8b2005f864d33975177c8d2ca34d59ac841c9545916c302f
@@ -54,38 +55,41 @@ jobs:
 
     - name: Build Swift Kernel (liblogic.so)
       run: |
-        # 每一轮编译都强制加载环境
         [ -f "$HOME/.local/share/swiftly/env.sh" ] && source "$HOME/.local/share/swiftly/env.sh"
         export PATH="$HOME/.local/bin:$PATH"
         
+        # 查找 SDK 路径而非仅仅 ID
+        SDK_PATH=$(swift sdk list --show-paths | grep android | head -n 1 | awk '{print $2}')
         SDK_ID=$(swift sdk list | grep android | head -n 1 | awk '{print $1}')
-        echo "Using SDK: $SDK_ID"
         
-        # 【修正点】将图4报错的 -swift-sdk 改为 --swift-sdk (双横杠)
+        echo "Using SDK ID: $SDK_ID"
+        echo "Using SDK Path: $SDK_PATH"
+
+        # 使用最原始的 -sdk 路径调用，规避不同版本对 --swift-sdk 参数名的争议
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
-          --swift-sdk $SDK_ID \
+          -sdk "$SDK_PATH" \
           core/Logic.swift \
           -o liblogic.so
         
-        # 动态定位并拷贝运行时库
-        SWIFT_LIB=$(swift --print-target-info --swift-sdk $SDK_ID | jq -r '.paths.runtimeLibraryPaths[0]')/aarch64
+        # 拷贝库文件
+        SWIFT_LIB=$(swift --print-target-info --swift-sdk $SDK_ID | jq -r '.paths.runtimeLibraryPaths[0]' || echo "")
+        # 如果 jq 失败，尝试备用路径查找
+        if [ -z "$SWIFT_LIB" ]; then SWIFT_LIB="$SDK_PATH/usr/lib/swift/android/aarch64"; fi
+        
         cp $SWIFT_LIB/libswiftCore.so .
         cp $SWIFT_LIB/libswiftGlibc.so .
         cp $SWIFT_LIB/libswiftDispatch.so .
         cp $SWIFT_LIB/libswift_Concurrency.so .
         cp $SWIFT_LIB/libFoundation.so .
-        
-        echo "Swift 核心库与运行时已就绪"
 
-    - name: Build APK with Buildozer
+    - name: Build with Buildozer
       run: |
         pip install --user --upgrade buildozer cython
         export PATH=$PATH:$HOME/.local/bin
-        # 开始打包，自动回答 Yes
         yes | buildozer android debug
 
-    - name: Upload APK Artifact
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: NoteOrigin-Debug-APK
