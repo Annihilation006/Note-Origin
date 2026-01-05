@@ -15,62 +15,61 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install System Dependencies
+    - name: Install Swiftly and Latest Toolchain
       run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential git python3-dev ffmpeg \
-          libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
-          libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
-          zlib1g-dev libgstreamer1.0-dev libunwind-dev unzip wget curl
+        # 安装 Swiftly（官方推荐方式）
+        curl -L https://swiftlang.github.io/swiftly/swiftly-install.sh | bash
+        echo "$HOME/.swiftly/bin" >> $GITHUB_PATH
+        swiftly init --quiet-shell-followup
 
-    - name: Setup Swift SDK (Stable Release Method)
-      run: |
-        # 1. 使用官方 6.0.2 正式版链接（Ubuntu 22.04 专用）
-        wget https://download.swift.org/swift-6.0.2-release/ubuntu2204/swift-6.0.2-RELEASE/swift-6.0.2-RELEASE-ubuntu22.04.tar.gz
-        tar -xzf swift-6.0.2-RELEASE-ubuntu22.04.tar.gz
-        
-        # 2. 将 Swift 工具链路径加入系统路径
-        echo "$GITHUB_WORKSPACE/swift-6.0.2-RELEASE-ubuntu22.04/usr/bin" >> $GITHUB_PATH
-        
-        # 3. 使用正式版 Android SDK 扩展包链接
-        wget https://download.swift.org/swift-6.0.2-release/android-24/swift-6.0.2-RELEASE-android-24-sdk.artifactbundle.tar.gz
-        ./swift-6.0.2-RELEASE-ubuntu22.04/usr/bin/swift sdk install swift-6.0.2-RELEASE-android-24-sdk.artifactbundle.tar.gz
+        # 安装最新稳定版主机工具链（会自动拉取当前最新，如 6.2.x）
+        swiftly install latest
 
-    - name: Install Android NDK r27d
+    - name: Install Latest Android Swift SDK Bundle
       run: |
-        mkdir -p ~/android-ndk
-        cd ~/android-ndk
-        wget https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
-        unzip -q android-ndk-r27d-linux.zip
-        echo "ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r27d" >> $GITHUB_ENV
+        # 获取最新 development snapshot 的 Android bundle URL（2026-01 初最新）
+        # 如果这个具体日期失效了，替换成 swift.org 上最新的（通常每周更新）
+        ANDROID_BUNDLE_URL="https://download.swift.org/development/android-sdk/swift-DEVELOPMENT-SNAPSHOT-2026-01-03-a/swift-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz"
+
+        # 可选：添加 checksum 如果官方提供（目前可省略，swift sdk install 会验证）
+        swift sdk install $ANDROID_BUNDLE_URL
+
+        # 可选：运行 setup 脚本链接 NDK（如果有需要；我们纯库编译可跳过，但保险起见）
+        # swift sdk run setup-android-sdk.sh  # 如果报错可注释掉
 
     - name: Build Swift Kernel (liblogic.so)
       run: |
-        # 显式调用解压出来的编译器
-        export PATH="$GITHUB_WORKSPACE/swift-6.0.2-RELEASE-ubuntu22.04/usr/bin:$PATH"
-        
-        # 获取正式版 SDK ID
+        # 自动获取 Android SDK ID
         SDK_ID=$(swift sdk list | grep android | head -n 1 | awk '{print $1}')
-        
-        # 编译核心库
-        swiftc -emit-library -target aarch64-unknown-linux-android31 -swift-sdk $SDK_ID core/Logic.swift -o liblogic.so
-        
-        # 拷贝运行时库（注意路径必须对应 6.0.2 版本）
-        SWIFT_LIB_DIR=$GITHUB_WORKSPACE/swift-6.0.2-RELEASE-ubuntu22.04/usr/lib/swift/android/aarch64
-        cp $SWIFT_LIB_DIR/libswiftCore.so .
-        cp $SWIFT_LIB_DIR/libswiftGlibc.so .
-        cp $SWIFT_LIB_DIR/libswiftDispatch.so .
-        cp $SWIFT_LIB_DIR/libswift_Concurrency.so .
-        cp $SWIFT_LIB_DIR/libFoundation.so .
+        echo "Using Android SDK: $SDK_ID"
 
-    - name: Build APK with Buildozer
+        # 编译核心库（target 保持 aarch64-android31）
+        swiftc -emit-library -target aarch64-unknown-linux-android31 -swift-sdk $SDK_ID core/Logic.swift -o liblogic.so
+
+        # 拷贝运行时库（路径根据 swiftly 安装调整）
+        SWIFT_LIB=$(swift --print-target-info | jq -r '.paths.runtimeLibraryPaths[0]')/android/aarch64
+        echo "Swift runtime lib path: $SWIFT_LIB"
+
+        cp $SWIFT_LIB/libswiftCore.so .
+        cp $SWIFT_LIB/libswiftGlibc.so .
+        cp $SWIFT_LIB/libswiftDispatch.so .
+        cp $SWIFT_LIB/libswift_Concurrency.so .
+        cp $SWIFT_LIB/libFoundation.so .
+
+        echo "Swift 内核与运行库准备完毕"
+
+    - name: Install Buildozer Dependencies
       run: |
-        pip install --user --upgrade buildozer cython
+        sudo apt-get update
+        sudo apt-get install -y python3-pip build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev openjdk-17-jdk-headless
+        pip install --user --upgrade buildozer cython jq  # 加 jq 用于解析路径
+
+    - name: Build with Buildozer
+      run: |
         export PATH=$PATH:$HOME/.local/bin
-        # 自动打包开始
         yes | buildozer android debug
 
-    - name: Upload APK Artifact
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: NoteOrigin-Debug-APK
