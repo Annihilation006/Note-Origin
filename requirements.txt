@@ -1,0 +1,4 @@
+kivymd==1.2.0
+kivy==2.3.0
+httpx
+pyjnius
