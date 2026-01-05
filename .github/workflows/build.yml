@@ -13,45 +13,70 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11' # 修正了這裡的橫槓
+        python-version: '3.11'
 
-    - name: Install Swift Android SDK
+    - name: Install Dependencies
       run: |
-        # 增加 -L 和 -f 參數來確保穩定下載，並換一個更穩定的官方連結
-        curl -fL https://swiftlang.github.io/swiftly/swiftly-install.sh | bash -s -- -y
-        export PATH="$HOME/.local/bin:$PATH"
-        source $HOME/.bashrc
-        
-        # 修正下載連結：使用 2024 年底最穩定的 release 版，避免 snapshot 連結失效
+        sudo apt-get update
+        sudo apt-get install -y build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev unzip wget curl
+
+    - name: Install Swiftly (Official 2026 Method)
+      run: |
+        # 官方最新安装方式：下载自安装二进制
+        curl -fL -O https://download.swift.org/swiftly/linux/swiftly-x86_64.tar.gz
+        tar zxf swiftly-x86_64.tar.gz
+        ./swiftly init --quiet-shell-followup
+        # 添加到 PATH（GitHub Actions 需要 export）
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        # 根据 init 输出 source env（通常是这个路径）
+        source ~/.local/share/swiftly/env.bash || true
+
+    - name: Install Latest Swift Toolchain
+      run: |
         swiftly install latest
-        swift sdk install https://download.swift.org/swift-6.0.2-release/android-24/swift-6.0.2-RELEASE-android-24-sdk.artifactbundle.tar.gz
+
+    - name: Install Android NDK r27d
+      run: |
+        mkdir -p ~/android-ndk
+        cd ~/android-ndk
+        wget https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
+        unzip -q android-ndk-r27d-linux.zip
+        echo "ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r27d" >> $GITHUB_ENV
+
+    - name: Install Swift Android SDK Bundle
+      run: |
+        # 使用最新可用 snapshot 示例链接（实际运行时从 swift.org 复制当天 "Copy install command"）
+        # 这里用占位，建议手动更新为当天链接
+        swift sdk install https://download.swift.org/development/android-sdk/swift-DEVELOPMENT-SNAPSHOT-2026-01-05-a/swift-DEVELOPMENT-SNAPSHOT-2026-01-05-a_android.artifactbundle.tar.gz
+        # 链接 NDK（bundle 内脚本）
+        SDK_ID=$(swift sdk list | grep android | awk '{print $1}' || echo "")
+        if [ -n "$SDK_ID" ]; then
+          ~/.swiftpm/swift-sdks/$SDK_ID/setup-android-sdk.sh --ndk $ANDROID_NDK_HOME
+        fi
 
     - name: Build Swift Kernel (liblogic.so)
       run: |
-        export PATH="$HOME/.local/bin:$PATH"
-        # 這裡增加了一個自動尋找路徑的容錯
-        SDK_ID=$(swift sdk list | grep android | head -n 1 | awk '{print $1}')
-        swiftc -emit-library -target aarch64-unknown-linux-android31 -swift-sdk $SDK_ID core/Logic.swift -o liblogic.so
+        cd core || exit 1
+        SDK_ID=$(swift sdk list | grep android | awk '{print $1}')
+        swiftc -emit-library -target aarch64-unknown-linux-android31 -swift-sdk $SDK_ID Logic.swift -o ../liblogic.so
         
-        # 拷貝運行庫
+        # 拷贝运行时库
         SWIFT_LIB=$(dirname $(which swift))/../lib/swift/android/aarch64
-        cp $SWIFT_LIB/libswiftCore.so .
-        cp $SWIFT_LIB/libswiftGlibc.so .
-        cp $SWIFT_LIB/libswiftDispatch.so .
-        cp $SWIFT_LIB/libswift_Concurrency.so .
-        cp $SWIFT_LIB/libFoundation.so .
+        cp $SWIFT_LIB/libswiftCore.so ../
+        cp $SWIFT_LIB/libswiftGlibc.so ../
+        cp $SWIFT_LIB/libswiftDispatch.so ../
+        cp $SWIFT_LIB/libswift_Concurrency.so ../
+        cp $SWIFT_LIB/libFoundation.so ../
 
-    - name: Install Buildozer Dependencies
+    - name: Install Buildozer
       run: |
-        sudo apt-get update
-        sudo apt-get install -y python3-pip build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev
         pip install --user --upgrade buildozer cython
 
     - name: Build with Buildozer
       run: |
-        export PATH=$PATH:$HOME/.local/bin
-        # 自動接受協議並啟動編譯
-        yes | buildozer android debug
+        buildozer init || true  # 如果 spec 已存在
+        # 自动配置（或假设 repo 有 spec）
+        buildozer -v android debug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
