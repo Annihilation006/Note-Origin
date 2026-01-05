@@ -23,26 +23,18 @@ jobs:
           libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
           zlib1g-dev libgstreamer1.0-dev libunwind-dev unzip wget curl
 
-    - name: Setup Swift and Android SDK (One Step)
+    - name: Setup Swift SDK (Direct Download Method)
       run: |
-        # 1. 安装 Swiftly
-        curl -fL -O https://download.swift.org/swiftly/linux/swiftly-x86_64.tar.gz
-        tar zxf swiftly-x86_64.tar.gz
-        ./swiftly init --quiet-shell-followup
+        # 1. 直接下载 Swift 6.0.2 官方工具链 (Ubuntu 22.04 专用版)
+        wget https://download.swift.org/swift-6.0.2-release/ubuntu2204/swift-6.0.2-RELEASE/swift-6.0.2-RELEASE-ubuntu22.04.tar.gz
+        tar -xzf swift-6.0.2-RELEASE-ubuntu22.04.tar.gz
         
-        # 2. 关键：在当前 Shell 环境中立即加载路径
-        export PATH="$HOME/.local/bin:$PATH"
-        source "$HOME/.local/share/swiftly/env.bash"
+        # 2. 将 Swift 工具链路径加入系统路径
+        echo "$GITHUB_WORKSPACE/swift-6.0.2-RELEASE-ubuntu22.04/usr/bin" >> $GITHUB_PATH
         
-        # 3. 安装工具链
-        swiftly install latest
-        
-        # 4. 安装 Android SDK Bundle
-        swift sdk install https://download.swift.org/swift-6.0.2-release/android-24/swift-6.0.2-RELEASE-android-24-sdk.artifactbundle.tar.gz
-        
-        # 5. 将路径传给后续所有步骤
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-        echo "SWIFTLY_ENV_PATH=$HOME/.local/share/swiftly/env.bash" >> $GITHUB_ENV
+        # 3. 下载并安装 Android SDK 扩展包 (Artifact Bundle)
+        wget https://download.swift.org/swift-6.0.2-release/android-24/swift-6.0.2-RELEASE-android-24-sdk.artifactbundle.tar.gz
+        ./swift-6.0.2-RELEASE-ubuntu22.04/usr/bin/swift sdk install swift-6.0.2-RELEASE-android-24-sdk.artifactbundle.tar.gz
 
     - name: Install Android NDK r27d
       run: |
@@ -54,17 +46,15 @@ jobs:
 
     - name: Build Swift Kernel (liblogic.so)
       run: |
-        # 显式加载之前保存的环境
-        source $SWIFTLY_ENV_PATH
-        export PATH="$HOME/.local/bin:$PATH"
+        # 显式指向刚才解压的工具链
+        SWIFT_BIN=$GITHUB_WORKSPACE/swift-6.0.2-RELEASE-ubuntu22.04/usr/bin/swiftc
+        SDK_ID=$(./swift-6.0.2-RELEASE-ubuntu22.04/usr/bin/swift sdk list | grep android | head -n 1 | awk '{print $1}')
         
-        SDK_ID=$(swift sdk list | grep android | head -n 1 | awk '{print $1}')
-        # 编译
-        swiftc -emit-library -target aarch64-unknown-linux-android31 -swift-sdk $SDK_ID core/Logic.swift -o liblogic.so
+        # 编译核心库
+        $SWIFT_BIN -emit-library -target aarch64-unknown-linux-android31 -swift-sdk $SDK_ID core/Logic.swift -o liblogic.so
         
-        # 拷贝库文件
-        SWIFT_BIN=$(which swift)
-        SWIFT_LIB_DIR=$(dirname $SWIFT_BIN)/../lib/swift/android/aarch64
+        # 自动定位并拷贝运行时库
+        SWIFT_LIB_DIR=$GITHUB_WORKSPACE/swift-6.0.2-RELEASE-ubuntu22.04/usr/lib/swift/android/aarch64
         cp $SWIFT_LIB_DIR/libswiftCore.so .
         cp $SWIFT_LIB_DIR/libswiftGlibc.so .
         cp $SWIFT_LIB_DIR/libswiftDispatch.so .
@@ -75,7 +65,7 @@ jobs:
       run: |
         pip install --user --upgrade buildozer cython
         export PATH=$PATH:$HOME/.local/bin
-        # 自动打包
+        # 确保 buildozer.spec 在仓库根目录，自动封包
         yes | buildozer android debug
 
     - name: Upload APK Artifact
