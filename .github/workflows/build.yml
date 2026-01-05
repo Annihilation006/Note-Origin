@@ -15,37 +15,34 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install System Dependencies (with libunwind fix)
+    - name: Install System Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get remove -y libunwind-* || true
-        sudo apt-get autoremove -y || true
-        
-        sudo apt-get install -y \
-          build-essential git python3-dev ffmpeg \
+        sudo apt-get install -y build-essential git python3-dev ffmpeg \
           libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
           libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
-          zlib1g-dev libgstreamer1.0-dev \
-          unzip wget curl openjdk-17-jdk
+          zlib1g-dev libgstreamer1.0-dev libunwind-dev unzip wget curl
 
-    - name: Install Swiftly (Official 2026 Method)
+    - name: Setup Swift and Android SDK (One Step)
       run: |
+        # 1. 安装 Swiftly
         curl -fL -O https://download.swift.org/swiftly/linux/swiftly-x86_64.tar.gz
         tar zxf swiftly-x86_64.tar.gz
         ./swiftly init --quiet-shell-followup
-        # 持久化 PATH
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-        # source env 文件（常见路径，容错多个）
-        source ~/.local/share/swiftly/env.bash || source ~/.swiftly/env.bash || source "$HOME/.local/share/swiftly/env.sh" || true
-
-    - name: Verify Swiftly Installation
-      run: |
-        which swiftly
-        swiftly --version
-
-    - name: Install Latest Swift Toolchain
-      run: |
+        
+        # 2. 关键：在当前 Shell 环境中立即加载路径
+        export PATH="$HOME/.local/bin:$PATH"
+        source "$HOME/.local/share/swiftly/env.bash"
+        
+        # 3. 安装工具链
         swiftly install latest
+        
+        # 4. 安装 Android SDK Bundle
+        swift sdk install https://download.swift.org/swift-6.0.2-release/android-24/swift-6.0.2-RELEASE-android-24-sdk.artifactbundle.tar.gz
+        
+        # 5. 将路径传给后续所有步骤
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        echo "SWIFTLY_ENV_PATH=$HOME/.local/share/swiftly/env.bash" >> $GITHUB_ENV
 
     - name: Install Android NDK r27d
       run: |
@@ -55,32 +52,31 @@ jobs:
         unzip -q android-ndk-r27d-linux.zip
         echo "ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r27d" >> $GITHUB_ENV
 
-    - name: Install Swift Android SDK Bundle
-      run: |
-        # 替换为当天最新链接（从 swift.org/download/ 复制 "Copy install command"）
-        swift sdk install https://download.swift.org/development/android-sdk/swift-DEVELOPMENT-SNAPSHOT-2026-01-05-a/swift-DEVELOPMENT-SNAPSHOT-2026-01-05-a_android.artifactbundle.tar.gz
-        SDK_ID=$(swift sdk list | grep android | awk '{print $1}' || echo "")
-        if [ -n "$SDK_ID" ]; then
-          ~/.swiftpm/swift-sdks/$SDK_ID/setup-android-sdk.sh --ndk $ANDROID_NDK_HOME
-        fi
-
     - name: Build Swift Kernel (liblogic.so)
       run: |
-        cd core || exit 1
-        SDK_ID=$(swift sdk list | grep android | awk '{print $1}')
-        swiftc -emit-library -target aarch64-unknown-linux-android31 -swift-sdk $SDK_ID Logic.swift -o ../liblogic.so
+        # 显式加载之前保存的环境
+        source $SWIFTLY_ENV_PATH
+        export PATH="$HOME/.local/bin:$PATH"
         
-        SWIFT_LIB=$(dirname $(which swift))/../lib/swift/android/aarch64
-        cp $SWIFT_LIB/libswift*.so ../
-
-    - name: Install Buildozer
-      run: |
-        pip install --user --upgrade buildozer cython==0.29.33
+        SDK_ID=$(swift sdk list | grep android | head -n 1 | awk '{print $1}')
+        # 编译
+        swiftc -emit-library -target aarch64-unknown-linux-android31 -swift-sdk $SDK_ID core/Logic.swift -o liblogic.so
+        
+        # 拷贝库文件
+        SWIFT_BIN=$(which swift)
+        SWIFT_LIB_DIR=$(dirname $SWIFT_BIN)/../lib/swift/android/aarch64
+        cp $SWIFT_LIB_DIR/libswiftCore.so .
+        cp $SWIFT_LIB_DIR/libswiftGlibc.so .
+        cp $SWIFT_LIB_DIR/libswiftDispatch.so .
+        cp $SWIFT_LIB_DIR/libswift_Concurrency.so .
+        cp $SWIFT_LIB_DIR/libFoundation.so .
 
     - name: Build APK with Buildozer
       run: |
-        buildozer init || true
-        buildozer -v android debug
+        pip install --user --upgrade buildozer cython
+        export PATH=$PATH:$HOME/.local/bin
+        # 自动打包
+        yes | buildozer android debug
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
