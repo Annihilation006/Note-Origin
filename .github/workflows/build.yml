@@ -15,70 +15,77 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install Swiftly (Official 2026 Tar.gz Method)
+    - name: Install System Dependencies
       run: |
-        # 下载官方 swiftly 二进制（x86_64 为 ubuntu）
-        curl -O https://download.swift.org/swiftly/linux/swiftly-x86_64.tar.gz
-        
-        # 解压并非交互初始化
+        sudo apt-get update
+        # 补全 libunwind-dev 防止 gstreamer 报错
+        sudo apt-get install -y build-essential git python3-dev ffmpeg \
+          libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+          libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
+          zlib1g-dev libgstreamer1.0-dev libunwind-dev unzip wget curl jq
+
+    - name: Setup Swiftly and Android SDK
+      run: |
+        # 1. 下载并非交互式初始化 swiftly
+        curl -L -O https://download.swift.org/swiftly/linux/swiftly-x86_64.tar.gz
         tar zxf swiftly-x86_64.tar.gz
         ./swiftly init --quiet-shell-followup --no-modify-profile
         
-        # 加载环境（关键）
-        source ~/.local/share/swiftly/env.sh
-        
-        # 添加 PATH 保险
+        # 2. 注入路径到全局 GITHUB_PATH
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
+        
+        # 3. 在当前 Shell 立即加载环境
+        export PATH="$HOME/.local/bin:$PATH"
+        source "$HOME/.local/share/swiftly/env.sh"
+        
+        # 4. 安装工具链 (使用 --assume-yes 避开交互)
+        swiftly install latest --assume-yes
+        
+        # 5. 安装 Android SDK Bundle (带上你找到的 Checksum)
+        swift sdk install \
+          https://download.swift.org/swift-6.3-branch/android-sdk/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz \
+          --checksum ca7cc00ca7483cbb8b2005f864d33975177c8d2ca34d59ac841c9545916c302f
 
-    - name: Install Latest Android Swift SDK Bundle
+    - name: Install Android NDK r27d
       run: |
-        source ~/.local/share/swiftly/env.sh
-        
-        # 2026-01-05 附近最新 nightly Android bundle（官方永久路径格式）
-        # 如果 404，换成最新日期如 2026-01-04-a 或查看 swift.org/download 最新 snapshot
-        ANDROID_BUNDLE="https://download.swift.org/development/android-sdk/swift-DEVELOPMENT-SNAPSHOT-2026-01-03-a/swift-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz"
-        
-        swift sdk install $ANDROID_BUNDLE
+        mkdir -p ~/android-ndk
+        cd ~/android-ndk
+        wget https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
+        unzip -q android-ndk-r27d-linux.zip
+        echo "ANDROID_NDK_HOME=$HOME/android-ndk/android-ndk-r27d" >> $GITHUB_ENV
 
     - name: Build Swift Kernel (liblogic.so)
       run: |
-        source ~/.local/share/swiftly/env.sh
+        # 强制加载环境
+        [ -f "$HOME/.local/share/swiftly/env.sh" ] && source "$HOME/.local/share/swiftly/env.sh"
+        export PATH="$HOME/.local/bin:$PATH"
         
-        # 获取 Android SDK ID
+        # 自动识别 SDK ID
         SDK_ID=$(swift sdk list | grep android | head -n 1 | awk '{print $1}')
-        echo "Using Android SDK: $SDK_ID"
+        echo "Using SDK: $SDK_ID"
         
         if [ -z "$SDK_ID" ]; then
-          echo "::error ::No Android SDK found!"
-          swift sdk list
+          echo "::error::未发现 Android SDK！"
           exit 1
         fi
 
-        # 编译共享库（target android31 兼容）
+        # 编译动态库
         swiftc -emit-library -target aarch64-unknown-linux-android31 -swift-sdk $SDK_ID core/Logic.swift -o liblogic.so
-
+        
         # 动态拷贝运行时库
         SWIFT_LIB=$(swift --print-target-info --swift-sdk $SDK_ID | jq -r '.paths.runtimeLibraryPaths[0]')/aarch64
-        echo "Runtime lib path: $SWIFT_LIB"
-
         cp $SWIFT_LIB/libswiftCore.so .
         cp $SWIFT_LIB/libswiftGlibc.so .
         cp $SWIFT_LIB/libswiftDispatch.so .
         cp $SWIFT_LIB/libswift_Concurrency.so .
         cp $SWIFT_LIB/libFoundation.so .
 
-        echo "Swift 内核 + 运行时库全员到齐！"
-
-    - name: Install Buildozer Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y python3-pip build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev openjdk-17-jdk-headless jq
-        pip install --user --upgrade buildozer cython
-
     - name: Build with Buildozer
       run: |
+        pip install --user --upgrade buildozer cython
         export PATH=$PATH:$HOME/.local/bin
+        # 开始打包，自动回答 Yes
         yes | buildozer android debug
 
     - name: Upload APK
