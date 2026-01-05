@@ -15,40 +15,49 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install Swiftly Non-Interactively
+    - name: Install Swiftly (Official 2026 Method)
       run: |
-        # 使用 -y 强制非交互，默认安装系统依赖（ubuntu-22.04 已基本齐全）
-        curl -L https://swiftlang.github.io/swiftly/swiftly-install.sh | bash -s -- -y
+        # 获取架构（ubuntu-22.04 是 x86_64）
+        ARCH=$(uname -m)
         
-        # 添加 swiftly 到 PATH
-        echo "$HOME/.swiftly/bin" >> $GITHUB_PATH
+        # 直接下载官方静态 Linux swiftly 二进制包（永久链接）
+        curl -O https://download.swift.org/swiftly/linux/swiftly-$ARCH.tar.gz
         
-        # source env 以确保当前 shell 可用（后续步骤会继承 PATH）
-        source $HOME/.swiftly/env.sh || true
-
-        # 安装最新稳定主机工具链
+        # 解压并初始化（quiet 模式避免任何交互）
+        tar zxf swiftly-$ARCH.tar.gz
+        ./swiftly init --quiet-shell-followup
+        
+        # 添加到 PATH（swiftly 会放在 ~/.local/share/swiftly）
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
+        
+        # 安装最新稳定主机工具链（会自动拉取当前最新，如 6.2+）
         swiftly install latest --quiet
 
-    - name: Install Android Swift SDK via Snapshot
+    - name: Install Android Swift SDK (6.3 Preview Nightly)
       run: |
-        # 直接安装 main-snapshot（官方推荐，永远拉取最新 Android 支持的 development build）
-        swiftly install main-snapshot --quiet
+        # 安装最新 6.3 分支 nightly snapshot（2026 年官方推荐，包含完整 Android 支持）
+        swiftly install release/6.3-snapshot --quiet
+        
+        # 或者用 main-snapshot 获取最前沿的 daily build
+        # swiftly install main-snapshot --quiet
 
     - name: Build Swift Kernel (liblogic.so)
       run: |
-        # 获取 Android SDK ID
+        # 获取 Android SDK ID（通常以 android 开头）
         SDK_ID=$(swift sdk list | grep android | head -n 1 | awk '{print $1}')
         echo "Using Android SDK: $SDK_ID"
         
         if [ -z "$SDK_ID" ]; then
-          echo "::error ::No Android SDK found! Check snapshot installation."
+          echo "::error ::No Android SDK detected! Installation may have failed."
+          swift sdk list
           exit 1
         fi
 
-        # 编译
+        # 编译共享库
         swiftc -emit-library -target aarch64-unknown-linux-android31 -swift-sdk $SDK_ID core/Logic.swift -o liblogic.so
 
-        # 动态拷贝运行时库（路径超级准）
+        # 动态获取并拷贝运行时库（绝对稳）
         SWIFT_LIB=$(swift --print-target-info --swift-sdk $SDK_ID | jq -r '.paths.runtimeLibraryPaths[0]')/aarch64
         echo "Runtime lib path: $SWIFT_LIB"
 
@@ -58,7 +67,7 @@ jobs:
         cp $SWIFT_LIB/libswift_Concurrency.so .
         cp $SWIFT_LIB/libFoundation.so .
 
-        echo "Swift 内核与运行库准备完毕"
+        echo "Swift 内核与所有运行库准备完毕"
 
     - name: Install Buildozer Dependencies
       run: |
