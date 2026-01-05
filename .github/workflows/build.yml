@@ -25,7 +25,7 @@ jobs:
 
     - name: Setup Swiftly and Android SDK
       run: |
-        # 1. 安装 Swiftly
+        # 1. 安装 Swiftly (非交互模式)
         curl -L -O https://download.swift.org/swiftly/linux/swiftly-x86_64.tar.gz
         tar zxf swiftly-x86_64.tar.gz
         ./swiftly init --quiet-shell-followup --no-modify-profile
@@ -38,36 +38,34 @@ jobs:
         
         swiftly install latest --assume-yes
         
-        # 2. 安装 Android SDK Bundle (Checksum 验证)
+        # 2. 安装 Android SDK (带 Checksum 验证)
         swift sdk install \
           https://download.swift.org/swift-6.3-branch/android-sdk/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz \
           --checksum ca7cc00ca7483cbb8b2005f864d33975177c8d2ca34d59ac841c9545916c302f
 
     - name: Setup Android NDK r27d
       run: |
-        # 3. 重新恢复 NDK 下载 (确保 NDK 在位)
+        # 3. 稳健下载 NDK
         wget -q https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
         unzip -q android-ndk-r27d-linux.zip
         NDK_PATH=$PWD/android-ndk-r27d
         
-        # 4. 自动搜索并执行 setup 脚本 (解决 No such file or directory)
-        SDK_ID=$(swift sdk list | grep android | head -n 1 | awk '{print $1}')
-        SEARCH_ROOT="$HOME/.local/share/swiftly/sdks"
-        
-        # 使用 find 自动查找脚本位置，兼容所有可能的层级
-        SETUP_SCRIPT=$(find "$SEARCH_ROOT" -name "setup-android-sdk.sh" | head -n 1)
+        # 4. 【核心修改】在地毯式搜索 setup 脚本 (解决 No such file or directory)
+        # 不再写死 .local 路径，直接从 $HOME 开始找
+        echo "Searching for setup-android-sdk.sh in $HOME..."
+        SETUP_SCRIPT=$(find $HOME -name "setup-android-sdk.sh" | head -n 1)
         
         if [ -z "$SETUP_SCRIPT" ]; then
-          echo "::error::在 SDK 中找不到 setup-android-sdk.sh！"
+          echo "::error::地毯式搜索失败！Swift SDK 可能未正确解压。"
+          # 打印当前目录结构辅助调试
+          find $HOME -maxdepth 4 -type d
           exit 1
         fi
         
         echo "Found script at: $SETUP_SCRIPT"
+        # 赋予执行权限并运行
+        chmod +x "$SETUP_SCRIPT"
         bash "$SETUP_SCRIPT" "$NDK_PATH"
-        
-        # 验证链接
-        BUNDLE_DIR=$(dirname $(dirname "$SETUP_SCRIPT"))
-        ls -d "$BUNDLE_DIR/ndk-sysroot" && echo "NDK Link Success!"
 
     - name: Build Swift Kernel (liblogic.so)
       run: |
@@ -76,7 +74,7 @@ jobs:
         
         SDK_ID=$(swift sdk list | grep android | head -n 1 | awk '{print $1}')
         
-        # 使用 --swift-sdk 编译
+        # 使用修正后的双横杠参数
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
           --swift-sdk $SDK_ID \
