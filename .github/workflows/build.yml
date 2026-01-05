@@ -38,30 +38,36 @@ jobs:
         
         swiftly install latest --assume-yes
         
-        # 2. 安装 Android SDK Bundle (使用带 Checksum 的命令)
+        # 2. 安装 Android SDK Bundle (Checksum 验证)
         swift sdk install \
           https://download.swift.org/swift-6.3-branch/android-sdk/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz \
           --checksum ca7cc00ca7483cbb8b2005f864d33975177c8d2ca34d59ac841c9545916c302f
 
     - name: Setup Android NDK r27d
       run: |
-        # 3. 下载并解压 NDK
+        # 3. 重新恢复 NDK 下载 (确保 NDK 在位)
         wget -q https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
         unzip -q android-ndk-r27d-linux.zip
         NDK_PATH=$PWD/android-ndk-r27d
         
-        # 4. 强制链接 NDK 到 Swift SDK (这是解决 standard library 报错的核心)
+        # 4. 自动搜索并执行 setup 脚本 (解决 No such file or directory)
         SDK_ID=$(swift sdk list | grep android | head -n 1 | awk '{print $1}')
+        SEARCH_ROOT="$HOME/.local/share/swiftly/sdks"
         
-        # 探测 SDK 物理路径 (Swiftly 默认安装位置)
-        BUNDLE_PATH="$HOME/.local/share/swiftly/sdks/$SDK_ID.artifactbundle"
+        # 使用 find 自动查找脚本位置，兼容所有可能的层级
+        SETUP_SCRIPT=$(find "$SEARCH_ROOT" -name "setup-android-sdk.sh" | head -n 1)
         
-        echo "Linking NDK to $BUNDLE_PATH"
-        # 运行 SDK 内部的 setup 脚本
-        bash "$BUNDLE_PATH/scripts/setup-android-sdk.sh" "$NDK_PATH"
+        if [ -z "$SETUP_SCRIPT" ]; then
+          echo "::error::在 SDK 中找不到 setup-android-sdk.sh！"
+          exit 1
+        fi
         
-        # 验证 NDK 符号链接是否创建成功
-        ls -d "$BUNDLE_PATH/ndk-sysroot" && echo "NDK Link Success!"
+        echo "Found script at: $SETUP_SCRIPT"
+        bash "$SETUP_SCRIPT" "$NDK_PATH"
+        
+        # 验证链接
+        BUNDLE_DIR=$(dirname $(dirname "$SETUP_SCRIPT"))
+        ls -d "$BUNDLE_DIR/ndk-sysroot" && echo "NDK Link Success!"
 
     - name: Build Swift Kernel (liblogic.so)
       run: |
@@ -70,22 +76,20 @@ jobs:
         
         SDK_ID=$(swift sdk list | grep android | head -n 1 | awk '{print $1}')
         
-        # 编译动态库 (使用 --swift-sdk 参数)
+        # 使用 --swift-sdk 编译
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
           --swift-sdk $SDK_ID \
           core/Logic.swift \
           -o liblogic.so
         
-        # 动态定位运行时库
+        # 提取运行时库
         SWIFT_LIB=$(swift --print-target-info --swift-sdk $SDK_ID | jq -r '.paths.runtimeLibraryPaths[0]')/aarch64
         cp $SWIFT_LIB/libswiftCore.so .
         cp $SWIFT_LIB/libswiftGlibc.so .
         cp $SWIFT_LIB/libswiftDispatch.so .
         cp $SWIFT_LIB/libswift_Concurrency.so .
         cp $SWIFT_LIB/libFoundation.so .
-        
-        echo "Swift 编译与库提取全部完成！"
 
     - name: Build with Buildozer
       run: |
