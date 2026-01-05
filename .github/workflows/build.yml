@@ -17,44 +17,40 @@ jobs:
 
     - name: Install Swiftly Non-Interactively
       run: |
-        # 强制非交互式安装，禁用系统依赖自动安装（避免交互提示）
-        curl -L https://swiftlang.github.io/swiftly/swiftly-install.sh | \
-          bash -s -- -y --install-system-dependencies=false
+        # 使用 -y 强制非交互，默认安装系统依赖（ubuntu-22.04 已基本齐全）
+        curl -L https://swiftlang.github.io/swiftly/swiftly-install.sh | bash -s -- -y
         
-        # 添加到 PATH
+        # 添加 swiftly 到 PATH
         echo "$HOME/.swiftly/bin" >> $GITHUB_PATH
         
-        # 初始化（quiet 模式，避免任何输出干扰）
-        swiftly init --quiet-shell-followup
+        # source env 以确保当前 shell 可用（后续步骤会继承 PATH）
+        source $HOME/.swiftly/env.sh || true
 
-        # 安装最新稳定主机工具链（目前会拉 Swift 6.2+ 或更高）
+        # 安装最新稳定主机工具链
         swiftly install latest --quiet
 
-    - name: Install Latest Android Swift SDK Bundle
+    - name: Install Android Swift SDK via Snapshot
       run: |
-        # 使用官方推荐的 snapshot 方式安装最新 Android SDK（2026 年 1 月最新）
-        # main-snapshot 是 daily development build，永远最新且可用
+        # 直接安装 main-snapshot（官方推荐，永远拉取最新 Android 支持的 development build）
         swiftly install main-snapshot --quiet
-        
-        # 或者指定 6.3 分支（更稳定预览）：swiftly install 6.3-snapshot --quiet
 
     - name: Build Swift Kernel (liblogic.so)
       run: |
-        # 列出并获取 Android SDK ID（通常是 aarch64-unknown-linux-android*）
+        # 获取 Android SDK ID
         SDK_ID=$(swift sdk list | grep android | head -n 1 | awk '{print $1}')
         echo "Using Android SDK: $SDK_ID"
         
         if [ -z "$SDK_ID" ]; then
-          echo "Error: No Android SDK found!"
+          echo "::error ::No Android SDK found! Check snapshot installation."
           exit 1
         fi
 
-        # 编译共享库
+        # 编译
         swiftc -emit-library -target aarch64-unknown-linux-android31 -swift-sdk $SDK_ID core/Logic.swift -o liblogic.so
 
-        # 动态获取运行时库路径并拷贝（超级稳）
+        # 动态拷贝运行时库（路径超级准）
         SWIFT_LIB=$(swift --print-target-info --swift-sdk $SDK_ID | jq -r '.paths.runtimeLibraryPaths[0]')/aarch64
-        echo "Swift runtime lib path: $SWIFT_LIB"
+        echo "Runtime lib path: $SWIFT_LIB"
 
         cp $SWIFT_LIB/libswiftCore.so .
         cp $SWIFT_LIB/libswiftGlibc.so .
@@ -69,45 +65,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y python3-pip build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev openjdk-17-jdk-headless jq
         pip install --user --upgrade buildozer cython
-
-    - name: Build with Buildozer
-      run: |
-        export PATH=$PATH:$HOME/.local/bin
-        yes | buildozer android debug
-
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: NoteOrigin-Debug-APK
-        path: bin/*.apk        # 可选：运行 setup 脚本链接 NDK（如果有需要；我们纯库编译可跳过，但保险起见）
-        # swift sdk run setup-android-sdk.sh  # 如果报错可注释掉
-
-    - name: Build Swift Kernel (liblogic.so)
-      run: |
-        # 自动获取 Android SDK ID
-        SDK_ID=$(swift sdk list | grep android | head -n 1 | awk '{print $1}')
-        echo "Using Android SDK: $SDK_ID"
-
-        # 编译核心库（target 保持 aarch64-android31）
-        swiftc -emit-library -target aarch64-unknown-linux-android31 -swift-sdk $SDK_ID core/Logic.swift -o liblogic.so
-
-        # 拷贝运行时库（路径根据 swiftly 安装调整）
-        SWIFT_LIB=$(swift --print-target-info | jq -r '.paths.runtimeLibraryPaths[0]')/android/aarch64
-        echo "Swift runtime lib path: $SWIFT_LIB"
-
-        cp $SWIFT_LIB/libswiftCore.so .
-        cp $SWIFT_LIB/libswiftGlibc.so .
-        cp $SWIFT_LIB/libswiftDispatch.so .
-        cp $SWIFT_LIB/libswift_Concurrency.so .
-        cp $SWIFT_LIB/libFoundation.so .
-
-        echo "Swift 内核与运行库准备完毕"
-
-    - name: Install Buildozer Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y python3-pip build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev openjdk-17-jdk-headless
-        pip install --user --upgrade buildozer cython jq  # 加 jq 用于解析路径
 
     - name: Build with Buildozer
       run: |
