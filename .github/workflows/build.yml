@@ -1,0 +1,52 @@
+name: Build Note Origin APK
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python_version: '3.11'
+
+    - name: Install Swift Android SDK
+      run: |
+        curl -L https://swiftlang.github.io/swiftly/swiftly-install.sh | bash -s -- -y
+        source $HOME/.bashrc
+        # 安装 2026-01-03 预览版
+        swiftly install latest
+        swift sdk install https://download.swift.org/development/android-sdk/swift-DEVELOPMENT-SNAPSHOT-2026-01-03-a/swift-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz
+
+    - name: Build Swift Kernel (liblogic.so)
+      run: |
+        SDK_ID=$(swift sdk list | grep android | awk '{print $1}')
+        swiftc -emit-library -target aarch64-unknown-linux-android31 -swift-sdk $SDK_ID core/Logic.swift -o liblogic.so
+        # 提取 Runtime 库
+        SWIFT_LIB=$(dirname $(which swift))/../lib/swift/android/aarch64
+        for lib in libswiftCore.so libswiftGlibc.so libswiftDispatch.so libswift_Concurrency.so libFoundation.so; do
+          cp $SWIFT_LIB/$lib .
+        done
+
+    - name: Install Buildozer and Dependencies
+      run: |
+        sudo apt-get install -y python3-pip build-essential git python3-dev ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev
+        sudo apt-get install -y libgstreamer1.0-gstreamer-lite1.0-dev libgstreamer-plugins-base1.0-dev
+        pip install --user --upgrade buildozer cython
+
+    - name: Build with Buildozer
+      run: |
+        export PATH=$PATH:$HOME/.local/bin
+        # 预接受 Android SDK 协议
+        yes | buildozer android debug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: NoteOrigin-Debug-APK
+        path: bin/*.apk
