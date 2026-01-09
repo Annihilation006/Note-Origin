@@ -30,62 +30,59 @@ jobs:
         ./swiftly init --quiet-shell-followup --no-modify-profile
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
+
+    - name: Build Swift Core (Manual SDK/NDK Link)
+      run: |
+        # 1. 立即加载 Swift 环境
         export PATH="$HOME/.local/bin:$PATH"
         source "$HOME/.local/share/swiftly/env.sh"
         swiftly install latest --assume-yes
 
-    - name: Manual Setup Android SDK & NDK
-      run: |
-        # 1. 下载 NDK r27d
+        # 2. 下载并解压 NDK r27d
         wget -q https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
         unzip -q android-ndk-r27d-linux.zip
-        echo "NDK_PATH=$PWD/android-ndk-r27d" >> $GITHUB_ENV
+        NDK_ABS_PATH=$PWD/android-ndk-r27d
 
-        # 2. 手动下载并解压 Android SDK Bundle (跳过 swift sdk install 的黑盒)
-        # 我们直接把 tar.gz 解压到本地目录
+        # 3. 手动下载并解压 SDK Bundle
         wget -q https://download.swift.org/swift-6.3-branch/android-sdk/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz
-        mkdir -p my-swift-sdk
-        tar -zxf swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz -C my-swift-sdk
+        mkdir -p swift-sdk-root
+        tar -zxf swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz -C swift-sdk-root
         
-        # 3. 定位内部真正的 .sdk 文件夹
-        # 在 artifactbundle 模式下，它通常在：artifacts/SDK名称/内部/usr
-        REAL_SDK=$(find $PWD/my-swift-sdk -name "*.sdk" -type d | head -n 1)
-        echo "LOCKED_SDK_PATH=$REAL_SDK" >> $GITHUB_ENV
+        # 4. 实时锁定路径 (不依赖外部环境变量)
+        REAL_SDK_PATH=$(find $PWD/swift-sdk-root -name "*.sdk" -type d | head -n 1)
+        SETUP_SCRIPT=$(find $PWD/swift-sdk-root -name "setup-android-sdk.sh" | head -n 1)
         
-        # 4. 运行 setup 脚本链接 NDK
-        SETUP_SCRIPT=$(find $PWD/my-swift-sdk -name "setup-android-sdk.sh" | head -n 1)
+        echo "Found SDK at: $REAL_SDK_PATH"
+        echo "Found Setup at: $SETUP_SCRIPT"
+
+        # 5. 执行 NDK 链接
         chmod +x "$SETUP_SCRIPT"
-        bash "$SETUP_SCRIPT" "$PWD/android-ndk-r27d"
-        echo "SDK & NDK 物理链接完成"
+        bash "$SETUP_SCRIPT" "$NDK_ABS_PATH"
 
-    - name: Build Swift Kernel (liblogic.so)
-      run: |
-        source "$HOME/.local/share/swiftly/env.sh"
-        export PATH="$HOME/.local/bin:$PATH"
-        
-        echo "Using Path: $LOCKED_SDK_PATH"
-
-        # 使用最底层的 -sdk 标志，直接指向我们手动解压的路径
+        # 6. 立即执行编译 (同一进程内，变量绝对有效)
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
-          -sdk "$LOCKED_SDK_PATH" \
-          -I "$LOCKED_SDK_PATH/usr/lib/swift/android" \
-          -L "$LOCKED_SDK_PATH/usr/lib/swift/android/aarch64" \
+          -sdk "$REAL_SDK_PATH" \
+          -I "$REAL_SDK_PATH/usr/lib/swift/android" \
+          -L "$REAL_SDK_PATH/usr/lib/swift/android/aarch64" \
           core/Logic.swift \
           -o liblogic.so
         
-        # 物理拷贝库文件
-        SWIFT_LIB="$LOCKED_SDK_PATH/usr/lib/swift/android/aarch64"
+        # 7. 拷贝库文件
+        SWIFT_LIB="$REAL_SDK_PATH/usr/lib/swift/android/aarch64"
         cp $SWIFT_LIB/libswiftCore.so .
         cp $SWIFT_LIB/libswiftGlibc.so .
         cp $SWIFT_LIB/libswiftDispatch.so .
         cp $SWIFT_LIB/libswift_Concurrency.so .
         cp $SWIFT_LIB/libFoundation.so .
+        
+        echo "Successfully built liblogic.so and copied runtime libraries."
 
     - name: Build with Buildozer
       run: |
         pip install --user --upgrade buildozer cython
         export PATH=$PATH:$HOME/.local/bin
+        # 确保 Buildozer 能看到我们刚才生成的 .so 文件
         yes | buildozer android debug
 
     - name: Upload APK
