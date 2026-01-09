@@ -33,30 +33,31 @@ jobs:
 
     - name: Build Swift Core (Manual SDK/NDK Link)
       run: |
-        # 1. 環境加載
+        # 1. 环境加载
         export PATH="$HOME/.local/bin:$PATH"
         source "$HOME/.local/share/swiftly/env.sh"
         swiftly install latest --assume-yes
 
-        # 2. 下載並解壓 SDK (手動接管)
+        # 2. 下载并解压 SDK
         wget -q https://download.swift.org/swift-6.3-branch/android-sdk/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz
         mkdir -p sdk-temp
         tar -zxf swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz -C sdk-temp
         
-        # 3. 【關鍵修正】精準定位 REAL_SDK_PATH
-        # 我們尋找包含 usr/lib/swift/android 的目錄
-        REAL_SDK_PATH=$(find $PWD/sdk-temp -type d -path "*/usr/lib/swift/android" | sed 's|/usr/lib/swift/android||' | head -n 1)
+        # 3. 【核心修正】根据 Setup 脚本位置强制锁定 SDK 路径
+        # 脚本在 .../swift-android/scripts/setup-android-sdk.sh
+        # 对应的 SDK 根目录应该是 .../swift-android/
         SETUP_SCRIPT=$(find $PWD/sdk-temp -name "setup-android-sdk.sh" | head -n 1)
+        REAL_SDK_PATH=$(dirname $(dirname "$SETUP_SCRIPT"))
         
-        echo "REAL_SDK_PATH: $REAL_SDK_PATH"
+        echo "LOCKED_SDK_PATH: $REAL_SDK_PATH"
         echo "SETUP_SCRIPT: $SETUP_SCRIPT"
 
-        # 4. 鏈接 NDK (使用 GitHub 內建的 NDK 避免下載)
-        # NDK 27 已經預裝在 GitHub Runner 中
+        # 4. 链接 NDK (继续使用 GitHub 预装的 NDK 27)
         chmod +x "$SETUP_SCRIPT"
         bash "$SETUP_SCRIPT" "$ANDROID_NDK_LATEST_HOME"
 
-        # 5. 強制編譯
+        # 5. 强制编译 (手动补齐搜索路径)
+        # 针对 6.3 布局，我们直接把所有可能存放标准库的路径都塞进去
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
           -sdk "$REAL_SDK_PATH" \
@@ -65,15 +66,17 @@ jobs:
           core/Logic.swift \
           -o liblogic.so
         
-        # 6. 提取庫文件
-        SWIFT_LIB="$REAL_SDK_PATH/usr/lib/swift/android/aarch64"
-        cp $SWIFT_LIB/libswiftCore.so .
-        cp $SWIFT_LIB/libswiftGlibc.so .
-        cp $SWIFT_LIB/libswiftDispatch.so .
-        cp $SWIFT_LIB/libswift_Concurrency.so .
-        cp $SWIFT_LIB/libFoundation.so .
+        # 6. 提取库文件 (使用通配符搜索，防止路径再次失效)
+        SWIFT_LIB_DIR=$(find "$REAL_SDK_PATH" -name "aarch64" -type d | grep "android/aarch64" | head -n 1)
+        echo "Found runtime libs at: $SWIFT_LIB_DIR"
         
-        echo "Successfully built liblogic.so!"
+        cp "$SWIFT_LIB_DIR"/libswiftCore.so .
+        cp "$SWIFT_LIB_DIR"/libswiftGlibc.so .
+        cp "$SWIFT_LIB_DIR"/libswiftDispatch.so .
+        cp "$SWIFT_LIB_DIR"/libswift_Concurrency.so .
+        cp "$SWIFT_LIB_DIR"/libFoundation.so .
+        
+        echo "Success: Swift kernel and runtime libs are ready!"
 
     - name: Build with Buildozer
       run: |
