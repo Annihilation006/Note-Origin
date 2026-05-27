@@ -80,33 +80,3 @@ jobs:
       with:
         name: NoteOrigin-Debug-APK
         path: bin/*.apk
-        chmod +x "$SETUP_SCRIPT"
-        bash "$SETUP_SCRIPT" "$ANDROID_NDK_LATEST_HOME"
-
-        # 6. 最终编译
-        swiftc -emit-library \
-          -target aarch64-unknown-linux-android31 \
-          -sdk "$REAL_SDK_PATH" \
-          -I "$REAL_SDK_PATH/usr/lib/swift/android" \
-          -L "$REAL_SDK_PATH/usr/lib/swift/android/aarch64" \
-          core/Logic.swift \
-          -o liblogic.so
-        
-        # 7. 提取运行时库
-        SWIFT_LIB_DIR=$(find "$REAL_SDK_PATH" -name "aarch64" -type d | grep "android/aarch64" | head -n 1)
-        cp "$SWIFT_LIB_DIR"/libswift*.so .
-        cp "$SWIFT_LIB_DIR"/libFoundation.so .
-        
-        echo "Swift 6.3 Core Built Success!"
-
-    - name: Build with Buildozer
-      run: |
-        pip install --user --upgrade buildozer cython
-        export PATH=$PATH:$HOME/.local/bin
-        yes | buildozer android debug
-
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: NoteOrigin-Debug-APK
-        path: bin/*.apk
