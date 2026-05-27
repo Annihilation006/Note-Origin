@@ -18,7 +18,6 @@ jobs:
     - name: Install System Dependencies
       run: |
         sudo apt-get update
-        # 补全 Swiftly 报错提示的依赖库，防止安装中断
         sudo apt-get install -y build-essential git python3-dev ffmpeg \
           libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
           libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
@@ -27,7 +26,6 @@ jobs:
 
     - name: Setup Swift 6.3 Host Toolchain
       run: |
-        # 1. 安装 Swiftly
         curl -L -O https://download.swift.org/swiftly/linux/swiftly-x86_64.tar.gz
         tar zxf swiftly-x86_64.tar.gz
         ./swiftly init --quiet-shell-followup --no-modify-profile
@@ -37,12 +35,9 @@ jobs:
         export PATH="$HOME/.local/bin:$PATH"
         source "$HOME/.local/share/swiftly/env.sh"
         
-        # 2. 安装并强制切换到 6.3 开发版编译器
-        # 我们使用 || true 来忽略 Swiftly 最后的依赖警告退出码
         swiftly install 6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a --assume-yes || true
         swiftly use 6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a
         
-        # 验证版本
         swift --version
 
     - name: Build Swift Core (Aligned Toolchain)
@@ -50,16 +45,41 @@ jobs:
         export PATH="$HOME/.local/bin:$PATH"
         source "$HOME/.local/share/swiftly/env.sh"
         
-        # 3. 下载 SDK (既然工具链好了，我们直接解压编译)
         wget -q https://download.swift.org/swift-6.3-branch/android-sdk/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz
         mkdir -p sdk-temp
         tar -zxf swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz -C sdk-temp
         
-        # 4. 定位 SDK
         SETUP_SCRIPT=$(find $PWD/sdk-temp -name "setup-android-sdk.sh" | head -n 1)
         REAL_SDK_PATH=$(dirname $(dirname "$SETUP_SCRIPT"))
         
-        # 5. 链接 NDK (使用预装的 NDK 27)
+        chmod +x "$SETUP_SCRIPT"
+        bash "$SETUP_SCRIPT" "$ANDROID_NDK_LATEST_HOME"
+
+        swiftc -emit-library \
+          -target aarch64-unknown-linux-android31 \
+          -sdk "$REAL_SDK_PATH" \
+          -I "$REAL_SDK_PATH/usr/lib/swift/android" \
+          -L "$REAL_SDK_PATH/usr/lib/swift/android/aarch64" \
+          core/Logic.swift \
+          -o liblogic.so
+        
+        # 修复：用 lib*.so 通配符打包所有运行时（含 Swift 6.x 新增库）
+        SWIFT_LIB_DIR=$(find "$REAL_SDK_PATH" -name "aarch64" -type d | grep "android/aarch64" | head -n 1)
+        cp "$SWIFT_LIB_DIR"/lib*.so .
+        
+        echo "Swift 6.3 Core Built Success!"
+
+    - name: Build with Buildozer
+      run: |
+        pip install --user --upgrade buildozer cython
+        export PATH=$PATH:$HOME/.local/bin
+        yes | buildozer android debug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: NoteOrigin-Debug-APK
+        path: bin/*.apk
         chmod +x "$SETUP_SCRIPT"
         bash "$SETUP_SCRIPT" "$ANDROID_NDK_LATEST_HOME"
 
