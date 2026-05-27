@@ -46,12 +46,10 @@ jobs:
         export PATH="$HOME/.local/bin:$PATH"
         source "$HOME/.local/share/swiftly/env.sh"
 
-        # 下载 Android SDK bundle
         wget -q https://download.swift.org/swift-6.3-branch/android-sdk/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz
         mkdir -p sdk-temp
         tar -zxf swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz -C sdk-temp
 
-        # 定位 setup 脚本和 SDK 根目录
         SETUP_SCRIPT=$(find "$PWD/sdk-temp" -name "setup-android-sdk.sh" | head -n 1)
         if [ -z "$SETUP_SCRIPT" ]; then
           echo "ERROR: setup-android-sdk.sh not found!" && exit 1
@@ -59,30 +57,36 @@ jobs:
         REAL_SDK_PATH=$(dirname "$(dirname "$SETUP_SCRIPT")")
         echo "SDK path: $REAL_SDK_PATH"
 
-        # 链接 NDK
         chmod +x "$SETUP_SCRIPT"
         bash "$SETUP_SCRIPT" "$ANDROID_NDK_LATEST_HOME"
 
-        # 路径已从日志确认，直接硬指定
-        # 动态库(.so) 在 swift-aarch64/android
         SWIFT_LIB_DIR="$REAL_SDK_PATH/swift-resources/usr/lib/swift-aarch64/android"
-        # SwiftAndroid 模块在 ndk-sysroot
-        SWIFT_NDK_MOD="$REAL_SDK_PATH/ndk-sysroot/usr/lib/swift/android"
 
-        echo "Swift lib dir : $SWIFT_LIB_DIR"
-        echo "Swift NDK mod : $SWIFT_NDK_MOD"
+        # 找 SwiftAndroid 模块真实位置
+        echo "=== find SwiftAndroid ==="
+        find "$REAL_SDK_PATH" \( -name "SwiftAndroid.swiftmodule" -o -name "SwiftAndroid.swiftinterface" \) 2>/dev/null || echo "NOT FOUND"
 
-        # 编译 Swift → .so
+        echo "=== swiftmodules in ndk-sysroot ==="
+        find "$REAL_SDK_PATH/ndk-sysroot" -name "*.swiftmodule" 2>/dev/null | head -20 || true
+
+        echo "=== swiftmodules in swift-resources ==="
+        find "$REAL_SDK_PATH/swift-resources" -name "*.swiftmodule" 2>/dev/null | head -20 || true
+
+        # 工具链自带的 android 模块目录
+        TOOLCHAIN_DIR=$(dirname "$(which swiftc)")/../lib/swift/android
+        echo "=== Toolchain swift/android ==="
+        ls "$TOOLCHAIN_DIR" 2>/dev/null || echo "not found"
+
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
           -sdk "$REAL_SDK_PATH" \
-          -I "$SWIFT_NDK_MOD" \
+          -I "$REAL_SDK_PATH/ndk-sysroot/usr/lib/swift/android" \
           -I "$SWIFT_LIB_DIR" \
+          -I "$TOOLCHAIN_DIR/aarch64" \
           -L "$SWIFT_LIB_DIR" \
           core/Logic.swift \
           -o liblogic.so
 
-        # 提取运行时库
         cp "$SWIFT_LIB_DIR"/lib*.so .
 
         echo "=== Built files ==="
