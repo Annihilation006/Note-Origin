@@ -69,21 +69,34 @@ jobs:
         chmod +x "$SETUP_SCRIPT"
         bash "$SETUP_SCRIPT" "$ANDROID_NDK_LATEST_HOME"
 
+        # 调试：打印 SDK 内部结构，定位真实的 Swift 标准库路径
+        echo "=== SDK internal structure ==="
+        find "$REAL_SDK_PATH" -name "libswiftCore.so" 2>/dev/null || echo "libswiftCore.so not found"
+        find "$REAL_SDK_PATH" -type d -name "android" | head -10
+
+        # 定位 aarch64 标准库目录（artifactbundle 结构可能与普通 SDK 不同）
+        SWIFT_LIB_DIR=$(find "$REAL_SDK_PATH" -type d -name "aarch64" | head -n 1)
+        if [ -z "$SWIFT_LIB_DIR" ]; then
+          echo "ERROR: aarch64 dir not found, dumping tree:"
+          find "$REAL_SDK_PATH" -maxdepth 6 -type d
+          exit 1
+        fi
+        echo "Swift lib dir: $SWIFT_LIB_DIR"
+
+        # SWIFT_MODULE_DIR: 存放 .swiftmodule 的上级目录
+        SWIFT_MODULE_DIR=$(dirname "$SWIFT_LIB_DIR")
+        echo "Swift module dir: $SWIFT_MODULE_DIR"
+
         # 编译 Swift → .so
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
           -sdk "$REAL_SDK_PATH" \
-          -I "$REAL_SDK_PATH/usr/lib/swift/android" \
-          -L "$REAL_SDK_PATH/usr/lib/swift/android/aarch64" \
+          -I "$SWIFT_MODULE_DIR" \
+          -L "$SWIFT_LIB_DIR" \
           core/Logic.swift \
           -o liblogic.so
 
         # 提取所有运行时库
-        SWIFT_LIB_DIR=$(find "$REAL_SDK_PATH" -type d -name "aarch64" | grep "android/aarch64" | head -n 1)
-        if [ -z "$SWIFT_LIB_DIR" ]; then
-          echo "ERROR: Swift aarch64 lib dir not found!" && exit 1
-        fi
-        echo "Swift lib dir: $SWIFT_LIB_DIR"
         cp "$SWIFT_LIB_DIR"/lib*.so .
 
         echo "=== Built files ==="
