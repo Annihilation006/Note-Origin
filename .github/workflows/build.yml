@@ -51,38 +51,22 @@ jobs:
         tar -zxf swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz -C sdk-temp
 
         SETUP_SCRIPT=$(find "$PWD/sdk-temp" -name "setup-android-sdk.sh" | head -n 1)
-        if [ -z "$SETUP_SCRIPT" ]; then
-          echo "ERROR: setup-android-sdk.sh not found!" && exit 1
-        fi
         REAL_SDK_PATH=$(dirname "$(dirname "$SETUP_SCRIPT")")
         echo "SDK path: $REAL_SDK_PATH"
 
         chmod +x "$SETUP_SCRIPT"
         bash "$SETUP_SCRIPT" "$ANDROID_NDK_LATEST_HOME"
 
+        # 动态库目录（.so 文件）
         SWIFT_LIB_DIR="$REAL_SDK_PATH/swift-resources/usr/lib/swift-aarch64/android"
+        # 模块目录（.swiftmodule 文件，日志已确认在 swift_static-aarch64）
+        SWIFT_MOD_DIR="$REAL_SDK_PATH/swift-resources/usr/lib/swift_static-aarch64/android"
 
-        # 找 SwiftAndroid 模块真实位置
-        echo "=== find SwiftAndroid ==="
-        find "$REAL_SDK_PATH" \( -name "SwiftAndroid.swiftmodule" -o -name "SwiftAndroid.swiftinterface" \) 2>/dev/null || echo "NOT FOUND"
-
-        echo "=== swiftmodules in ndk-sysroot ==="
-        find "$REAL_SDK_PATH/ndk-sysroot" -name "*.swiftmodule" 2>/dev/null | head -20 || true
-
-        echo "=== swiftmodules in swift-resources ==="
-        find "$REAL_SDK_PATH/swift-resources" -name "*.swiftmodule" 2>/dev/null | head -20 || true
-
-        # 工具链自带的 android 模块目录
-        TOOLCHAIN_DIR=$(dirname "$(which swiftc)")/../lib/swift/android
-        echo "=== Toolchain swift/android ==="
-        ls "$TOOLCHAIN_DIR" 2>/dev/null || echo "not found"
-
+        # Logic.swift 已去掉 Foundation，只用纯标准库，不需要 SwiftAndroid
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
           -sdk "$REAL_SDK_PATH" \
-          -I "$REAL_SDK_PATH/ndk-sysroot/usr/lib/swift/android" \
-          -I "$SWIFT_LIB_DIR" \
-          -I "$TOOLCHAIN_DIR/aarch64" \
+          -I "$SWIFT_MOD_DIR" \
           -L "$SWIFT_LIB_DIR" \
           core/Logic.swift \
           -o liblogic.so
