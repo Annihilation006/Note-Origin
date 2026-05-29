@@ -51,23 +51,36 @@ jobs:
         tar -zxf swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz -C sdk-temp
 
         SETUP_SCRIPT=$(find "$PWD/sdk-temp" -name "setup-android-sdk.sh" | head -n 1)
+        if [ -z "$SETUP_SCRIPT" ]; then
+          echo "ERROR: setup-android-sdk.sh not found!" && exit 1
+        fi
         REAL_SDK_PATH=$(dirname "$(dirname "$SETUP_SCRIPT")")
         echo "SDK path: $REAL_SDK_PATH"
 
         chmod +x "$SETUP_SCRIPT"
         bash "$SETUP_SCRIPT" "$ANDROID_NDK_LATEST_HOME"
 
-        # 动态库目录（.so 文件）
-        SWIFT_LIB_DIR="$REAL_SDK_PATH/swift-resources/usr/lib/swift-aarch64/android"
-        # 模块目录（.swiftmodule 文件，日志已确认在 swift_static-aarch64）
-        SWIFT_MOD_DIR="$REAL_SDK_PATH/swift-resources/usr/lib/swift_static-aarch64/android"
+        # 找 swiftrt.o 真实位置
+        echo "=== find swiftrt.o ==="
+        find "$REAL_SDK_PATH" -name "swiftrt.o" 2>/dev/null || echo "NOT FOUND"
 
-        # Logic.swift 已去掉 Foundation，只用纯标准库，不需要 SwiftAndroid
+        SWIFT_LIB_DIR="$REAL_SDK_PATH/swift-resources/usr/lib/swift-aarch64/android"
+
+        # 找到 swiftrt.o 后手动用 -Xlinker 指定
+        SWIFTRT=$(find "$REAL_SDK_PATH" -name "swiftrt.o" | grep "aarch64" | head -n 1)
+        echo "swiftrt.o: $SWIFTRT"
+
+        SWIFTRT_FLAG=""
+        if [ -n "$SWIFTRT" ]; then
+          SWIFTRT_FLAG="-Xlinker $SWIFTRT"
+        fi
+
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
           -sdk "$REAL_SDK_PATH" \
-          -I "$SWIFT_MOD_DIR" \
+          -I "$SWIFT_LIB_DIR" \
           -L "$SWIFT_LIB_DIR" \
+          $SWIFTRT_FLAG \
           core/Logic.swift \
           -o liblogic.so
 
