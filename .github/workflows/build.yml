@@ -60,27 +60,20 @@ jobs:
         chmod +x "$SETUP_SCRIPT"
         bash "$SETUP_SCRIPT" "$ANDROID_NDK_LATEST_HOME"
 
-        # 找 swiftrt.o 真实位置
-        echo "=== find swiftrt.o ==="
-        find "$REAL_SDK_PATH" -name "swiftrt.o" 2>/dev/null || echo "NOT FOUND"
-
         SWIFT_LIB_DIR="$REAL_SDK_PATH/swift-resources/usr/lib/swift-aarch64/android"
 
-        # 找到 swiftrt.o 后手动用 -Xlinker 指定
-        SWIFTRT=$(find "$REAL_SDK_PATH" -name "swiftrt.o" | grep "aarch64" | head -n 1)
-        echo "swiftrt.o: $SWIFTRT"
-
-        SWIFTRT_FLAG=""
-        if [ -n "$SWIFTRT" ]; then
-          SWIFTRT_FLAG="-Xlinker $SWIFTRT"
-        fi
+        # swiftc 内部硬编码去找 $SDK/usr/lib/swift/android/aarch64/swiftrt.o
+        # 在那个路径建软链接指向真实位置
+        mkdir -p "$REAL_SDK_PATH/usr/lib/swift/android/aarch64"
+        ln -sf \
+          "$REAL_SDK_PATH/ndk-sysroot/usr/lib/swift/android/aarch64/swiftrt.o" \
+          "$REAL_SDK_PATH/usr/lib/swift/android/aarch64/swiftrt.o"
 
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
           -sdk "$REAL_SDK_PATH" \
           -I "$SWIFT_LIB_DIR" \
           -L "$SWIFT_LIB_DIR" \
-          $SWIFTRT_FLAG \
           core/Logic.swift \
           -o liblogic.so
 
