@@ -22,7 +22,7 @@ jobs:
           libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
           libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
           zlib1g-dev libgstreamer1.0-dev libunwind-dev unzip wget curl jq \
-          libcurl4-openssl-dev pkg-config python3-lldb-13
+          libcurl4-openssl-dev pkg-config python3-lldb-13 lld
 
     - name: Setup Swift 6.3 Host Toolchain
       run: |
@@ -62,18 +62,22 @@ jobs:
 
         SWIFT_LIB_DIR="$REAL_SDK_PATH/swift-resources/usr/lib/swift-aarch64/android"
 
-        # swiftc 内部硬编码去找 $SDK/usr/lib/swift/android/aarch64/swiftrt.o
-        # 在那个路径建软链接指向真实位置
+        # swiftrt.o 软链接
         mkdir -p "$REAL_SDK_PATH/usr/lib/swift/android/aarch64"
         ln -sf \
           "$REAL_SDK_PATH/ndk-sysroot/usr/lib/swift/android/aarch64/swiftrt.o" \
           "$REAL_SDK_PATH/usr/lib/swift/android/aarch64/swiftrt.o"
+
+        # NDK 自带的 lld 路径
+        NDK_LLD="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld"
+        echo "Using linker: $NDK_LLD"
 
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
           -sdk "$REAL_SDK_PATH" \
           -I "$SWIFT_LIB_DIR" \
           -L "$SWIFT_LIB_DIR" \
+          -use-ld="$NDK_LLD" \
           core/Logic.swift \
           -o liblogic.so
 
