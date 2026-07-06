@@ -68,9 +68,28 @@ jobs:
           "$REAL_SDK_PATH/ndk-sysroot/usr/lib/swift/android/aarch64/swiftrt.o" \
           "$REAL_SDK_PATH/usr/lib/swift/android/aarch64/swiftrt.o"
 
-        # NDK 自带的 lld 路径
+        # NDK lld
         NDK_LLD="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld"
-        echo "Using linker: $NDK_LLD"
+
+        # swiftc 去 toolchain 的 clang/21/lib/aarch64-unknown-linux-android31/ 找库
+        # 但实际在 NDK 里，建软链接补上
+        SWIFT_CLANG_LIB="$HOME/.local/share/swiftly/toolchains/6.3-snapshot-2026-01-03/usr/lib/clang/21/lib/aarch64-unknown-linux-android31"
+        mkdir -p "$SWIFT_CLANG_LIB"
+
+        NDK_PREBUILT="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+
+        # libclang_rt.builtins.a
+        NDK_BUILTINS=$(find "$NDK_PREBUILT/lib" -name "libclang_rt.builtins-aarch64-android.a" 2>/dev/null | head -n 1)
+        if [ -z "$NDK_BUILTINS" ]; then
+          NDK_BUILTINS=$(find "$NDK_PREBUILT" -name "libclang_rt.builtins*.a" | grep aarch64 | head -n 1)
+        fi
+        echo "builtins: $NDK_BUILTINS"
+        ln -sf "$NDK_BUILTINS" "$SWIFT_CLANG_LIB/libclang_rt.builtins.a"
+
+        # libunwind.a
+        NDK_UNWIND=$(find "$NDK_PREBUILT" -name "libunwind.a" | grep aarch64 | head -n 1)
+        echo "unwind: $NDK_UNWIND"
+        ln -sf "$NDK_UNWIND" "$SWIFT_CLANG_LIB/libunwind.a"
 
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
