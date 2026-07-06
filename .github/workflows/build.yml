@@ -108,7 +108,7 @@ jobs:
 
     - name: Build with Buildozer
       run: |
-        pip install --user --upgrade buildozer cython
+        pip install --user buildozer cython==3.0.11
         export PATH=$PATH:$HOME/.local/bin
         yes | buildozer android debug
 
