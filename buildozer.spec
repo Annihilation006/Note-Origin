@@ -7,7 +7,7 @@ source.dir = .
 source.include_exts = py, png, jpg, kv, so, json
 android.add_libs_arm64_v8a = liblogic.so, libBlocksRuntime.so, libFoundation.so, libFoundationEssentials.so, libFoundationNetworking.so, libdispatch.so, libswiftAndroid.so, libswiftCore.so, libswiftDispatch.so, libswift_Concurrency.so, libswift_StringProcessing.so, libswiftRegexBuilder.so
 
-requirements = python3==3.11.15, kivy==2.3.1, kivymd==1.2.0, pyjnius, httpx, cython==3.0.11
+requirements = python3, kivy==2.3.1, kivymd==1.2.0, pyjnius, httpx, cython==3.0.11
 
 android.permissions = INTERNET, ACCESS_NETWORK_STATE, READ_EXTERNAL_STORAGE
 android.api = 34
