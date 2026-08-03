@@ -7,6 +7,23 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+    - name: Free Disk Space
+      run: |
+        echo "=== Before cleanup ==="
+        df -h /
+        # 删除预装但用不到的大块头
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android/sdk/ndk  # 用 buildozer 自己下的 r25b
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/.ghcup
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo rm -rf /opt/hostedtoolcache/Ruby
+        sudo rm -rf /opt/hostedtoolcache/node
+        sudo rm -rf /opt/hostedtoolcache/go
+        sudo apt-get clean
+        echo "=== After cleanup ==="
+        df -h /
+
     - name: Checkout Code
       uses: actions/checkout@v4
 
@@ -35,10 +52,13 @@ jobs:
         export PATH="$HOME/.local/bin:$PATH"
         source "$HOME/.local/share/swiftly/env.sh"
 
+        # 只装 snapshot，跳过顺带装的 6.3.2 stable
+        swiftly install 6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a --assume-yes --skip-install || true
         swiftly install 6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a --assume-yes || true
         swiftly use 6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a
 
         swift --version
+        df -h /
 
     - name: Build Swift Core (Aligned Toolchain)
       run: |
@@ -49,6 +69,7 @@ jobs:
         wget -q https://download.swift.org/swift-6.3-branch/android-sdk/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a/swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz
         mkdir -p sdk-temp
         tar -zxf swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz -C sdk-temp
+        rm swift-6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a_android.artifactbundle.tar.gz
 
         SETUP_SCRIPT=$(find "$PWD/sdk-temp" -name "setup-android-sdk.sh" | head -n 1)
         if [ -z "$SETUP_SCRIPT" ]; then
@@ -58,6 +79,7 @@ jobs:
         echo "SDK path: $REAL_SDK_PATH"
 
         chmod +x "$SETUP_SCRIPT"
+        # Swift 编译用系统 NDK（已清理旧 NDK，这里用环境变量里的新版）
         bash "$SETUP_SCRIPT" "$ANDROID_NDK_LATEST_HOME"
 
         SWIFT_LIB_DIR="$REAL_SDK_PATH/swift-resources/usr/lib/swift-aarch64/android"
@@ -68,28 +90,16 @@ jobs:
           "$REAL_SDK_PATH/ndk-sysroot/usr/lib/swift/android/aarch64/swiftrt.o" \
           "$REAL_SDK_PATH/usr/lib/swift/android/aarch64/swiftrt.o"
 
-        # NDK lld
-        NDK_LLD="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld"
-
-        # swiftc 去 toolchain 的 clang/21/lib/aarch64-unknown-linux-android31/ 找库
-        # 但实际在 NDK 里，建软链接补上
+        # libclang_rt 和 libunwind 软链接
         SWIFT_CLANG_LIB="$HOME/.local/share/swiftly/toolchains/6.3-snapshot-2026-01-03/usr/lib/clang/21/lib/aarch64-unknown-linux-android31"
         mkdir -p "$SWIFT_CLANG_LIB"
-
         NDK_PREBUILT="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64"
-
-        # libclang_rt.builtins.a
-        NDK_BUILTINS=$(find "$NDK_PREBUILT/lib" -name "libclang_rt.builtins-aarch64-android.a" 2>/dev/null | head -n 1)
-        if [ -z "$NDK_BUILTINS" ]; then
-          NDK_BUILTINS=$(find "$NDK_PREBUILT" -name "libclang_rt.builtins*.a" | grep aarch64 | head -n 1)
-        fi
-        echo "builtins: $NDK_BUILTINS"
-        ln -sf "$NDK_BUILTINS" "$SWIFT_CLANG_LIB/libclang_rt.builtins.a"
-
-        # libunwind.a
+        NDK_BUILTINS=$(find "$NDK_PREBUILT" -name "libclang_rt.builtins-aarch64-android.a" 2>/dev/null | head -n 1)
         NDK_UNWIND=$(find "$NDK_PREBUILT" -name "libunwind.a" | grep aarch64 | head -n 1)
-        echo "unwind: $NDK_UNWIND"
+        ln -sf "$NDK_BUILTINS" "$SWIFT_CLANG_LIB/libclang_rt.builtins.a"
         ln -sf "$NDK_UNWIND" "$SWIFT_CLANG_LIB/libunwind.a"
+
+        NDK_LLD="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld"
 
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
@@ -102,8 +112,14 @@ jobs:
 
         cp "$SWIFT_LIB_DIR"/lib*.so .
 
+        # 编译完删掉 SDK 压缩包和非 aarch64 的库，节省空间
+        rm -rf sdk-temp/*/swift-resources/usr/lib/swift-armv7
+        rm -rf sdk-temp/*/swift-resources/usr/lib/swift-x86_64
+        rm -rf sdk-temp/*/swift-resources/usr/lib/swift_static-*
+
         echo "=== Built files ==="
         ls *.so
+        df -h /
         echo "Swift 6.3 Core Built Success!"
 
     - name: Build with Buildozer
