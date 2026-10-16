@@ -1,23 +1,83 @@
-Note Origin: A Hybrid-Architecture Android Note-Taking Application
+Note Origin
 
-Note Origin 是一个轻量级的 Android 个人笔记应用，其核心是一项关于移动端混合开发架构的技术实践。
+用 Swift 写内核、用 Python 写界面 —— 一次 Android 混合架构实验
 
-🧠 项目出发点
+这是什么
 
-随着移动开发框架日益多样化，结合多种编程语言的混合架构成为平衡开发效率与系统性能的一种方案。与追求全平台代码复用的传统跨平台框架不同，本项目旨在探索一种异构分层架构，让不同语言各司其职。
+Note Origin 是一个跑在 Android 上的个人笔记应用。它的特别之处在于用了两种语言各干各的活：
 
-⚙️ 技术架构
+界面是 Python 写的（Kivy + KivyMD），负责按钮、日历、弹窗、动画
+核心逻辑是 Swift 写的，编译成 Android 能直接加载的 .so 共享库
+两边通过 C 接口打电话通信
+最后用 Buildozer 一键打包成 APK
 
-· 用户界面层：使用 Python 及 Kivy/KivyMD 框架快速构建，支持 Material You 动态取色与系统语言适配。
-· 核心逻辑层：使用 Swift 编写并编译为 Android 原生共享库（.so），通过 C 兼容接口与 Python 层通信。
-· 构建与部署：全程使用 Buildozer 及 Android NDK 进行自动化打包。
-· 外部服务集成：应用界面提供了配置窗口，可供用户接入第三方云端 AI 服务的 API，以实现扩展功能。
+不追求“一次编写全平台跑”，而是故意让不同语言在不同层级上各展所长。
 
-⚠️ 重要说明
+能干什么
 
-· 技术验证导向：本项目侧重于展示将 Swift 原生模块集成到 Python 驱动的 Android 应用中的完整工作流程与可行性。
-· 混淆而非加密：Swift 核心提供的是一种轻量级的、可逆的字符串变换，旨在进行基础的代码混淆，不提供任何数据加密或强安全保证，应用适用于非敏感内容的个人记录场景。
+按日期选一条笔记，Swift 内核返回经过轻量变换的内容
+支持 Android 12+ 的 Material You 动态取色，界面颜色跟着壁纸走
+可以在设置里填一个 AI API Key，选完笔记后自动调用云端模型帮你提炼要点
+笔记内容在 Swift 侧做过一次可逆混淆，不是明文躺在内存里
 
-📁 项目价值
+怎么跑起来的
 
-对于开发者而言，本项目提供了一个从代码编写、跨语言编译到最终 APK 打包的可复现的工程实例，可作为研究 Android 平台混合架构、Swift for Android 工具链应用的参考。
+用户点日期
+↓
+Python (Kivy) 层收到事件
+↓
+ctypes 调用 .so 里的 execute_data_purge(date, lang)
+↓
+Swift 层：拼接消息 → XOR 混淆 → 返回 C 字符串指针
+↓
+Python 层：读取指针 → 释放内存 → XOR 还原 → 显示原文
+↓
+子线程异步请求 AI 接口 → 主线程把结果贴到界面上
+
+涉及的关键技术：
+
+界面：Kivy 2.3.0 + KivyMD 1.2.0，负责 Material Design UI、日期选择器、弹窗
+内核：Swift 6.3，负责字符串处理，编译为 arm64-v8a 的 .so
+打包：Buildozer + NDK 25b，自动编译 Swift、打包 APK
+通信：ctypes + C ABI，Python 调用 .so 函数
+网络：httpx (async)，调 SiliconFlow 的 Qwen 模型
+存储：Kivy JsonStore，记住你的 API Key
+
+文件长什么样
+
+Note-Origin-main/
+main.py              应用入口：界面 + 业务逻辑都在这里
+core/
+Logic.swift      Swift 内核：字符串混淆与还原
+buildozer.spec       Buildozer 打包配置
+requirements.txt     Python 依赖清单
+LICENSE              开源协议
+.github/workflows/
+build.yml        GitHub Actions：每次提交自动构建 APK
+
+怎么构建
+
+本地跑：
+
+pip install buildozer cython==3.0.11
+buildozer android debug
+拿到 APK: bin/*.apk
+
+CI 会自动做这些事：清磁盘 → 装系统依赖 → 下 Swift 工具链 → 编译 Swift 内核 → Buildozer 打包 → 上传 APK。
+
+一点提醒
+
+这里的“混淆”不是加密。XOR 换个编码而已，密钥就写在代码里，拿到 APK 就能还原。适合记日记、备忘这类不需要防破解的场景，不适合存密码或敏感信息。
+
+适合看这个项目的人
+
+想试试 Android 上 Python + Swift 混搭开发的
+对 Swift for Android 工具链好奇的
+想了解 Buildozer 打包流程的
+想学 ctypes 跨语言调用的
+
+从代码到编译到打包，全流程都可以在本项目里追一遍。
+
+License
+
+见 LICENSE。
