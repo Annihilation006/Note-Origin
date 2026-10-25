@@ -178,26 +178,54 @@ object Ai {
         }
     }
 
-    /** 非流式单轮，失败抛异常 */
+    /** 非流式单轮，失败抛异常。错误信息尽量带原因，别让用户对着"不通"两个字猜 */
     suspend fun chat(cfg: AiConfig, user: String, system: String? = null): String = withContext(Dispatchers.IO) {
-        val url = buildEndpoint(cfg.format, cfg.baseUrl)
-        val req = Request.Builder()
-            .url(url)
-            .headers(okhttp3.Headers.headersOf(*headers(cfg.format, cfg.apiKey.trim()).flatMap { listOf(it.key, it.value) }.toTypedArray()))
-            .post(body(cfg.format, cfg.model, system, user).toRequestBody(JSON))
-            .build()
-        client.newCall(req).execute().use { resp ->
-            val text = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) {
-                var detail = ""
-                try {
-                    val e = JSONObject(text).optJSONObject("error")
-                    detail = e?.optString("message") ?: JSONObject(text).optString("message")
-                } catch (_: Exception) {
+        val url = try {
+            buildEndpoint(cfg.format, cfg.baseUrl)
+        } catch (e: Exception) {
+            throw IllegalStateException("地址不对: ${cfg.baseUrl}")
+        }
+        if (!url.startsWith("http")) {
+            throw IllegalStateException("地址不合法: $url")
+        }
+        val req = try {
+            Request.Builder()
+                .url(url)
+                .headers(okhttp3.Headers.headersOf(*headers(cfg.format, cfg.apiKey.trim()).flatMap { listOf(it.key, it.value) }.toTypedArray()))
+                .post(body(cfg.format, cfg.model, system, user).toRequestBody(JSON))
+                .build()
+        } catch (e: IllegalArgumentException) {
+            throw IllegalStateException("URL解析失败: $url（检查有没有多余字符）")
+        }
+        try {
+            client.newCall(req).execute().use { resp ->
+                val text = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) {
+                    var detail = ""
+                    try {
+                        val j = JSONObject(text)
+                        detail = j.optJSONObject("error")?.optString("message")
+                            ?: j.optJSONObject("error")?.optString("type")
+                            ?: j.optString("message")
+                    } catch (_: Exception) {
+                    }
+                    if (detail.isBlank()) detail = text.take(120)
+                    throw IllegalStateException("HTTP ${resp.code}${if (detail.isBlank()) "" else " · $detail"}")
                 }
-                throw IllegalStateException("HTTP ${resp.code}${if (detail.isBlank()) "" else " · $detail"}")
+                parse(cfg.format, text)
             }
-            parse(cfg.format, text)
+        } catch (e: java.net.SocketTimeoutException) {
+            throw IllegalStateException("连接超时（服务器没在时限内响应）")
+        } catch (e: java.net.UnknownHostException) {
+            throw IllegalStateException("域名解析失败: ${e.message ?: "检查Base URL拼写"}")
+        } catch (e: java.net.ConnectException) {
+            throw IllegalStateException("连不上服务器: ${e.message ?: "网络不通或端口关闭"}")
+        } catch (e: javax.net.ssl.SSLException) {
+            throw IllegalStateException("SSL握手失败: ${e.message?.take(120) ?: "证书问题"}")
+        } catch (e: IllegalStateException) {
+            throw e
+        } catch (e: Exception) {
+            throw IllegalStateException("${e::class.java.simpleName}: ${e.message ?: "未知网络错误"}")
         }
     }
 

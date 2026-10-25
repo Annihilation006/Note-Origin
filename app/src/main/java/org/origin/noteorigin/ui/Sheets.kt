@@ -277,6 +277,7 @@ fun SettingsSheet(
     var model by remember { mutableStateOf(cfg.model) }
     var obscure by remember { mutableStateOf(true) }
     var testing by remember { mutableStateOf(false) }
+    var testStatus by remember { mutableStateOf<Pair<String, InfoSeverity>?>(null) }
     var newAcc by remember { mutableStateOf("") }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
@@ -326,12 +327,15 @@ fun SettingsSheet(
                             onDone("先填 Base URL 和 Key", InfoSeverity.error); return@TextButton
                         }
                         testing = true
+                        testStatus = null
                         scope.launch {
                             try {
-                                Ai.ping(probe)
+                                val r = Ai.ping(probe)
+                                // Sheet开着时全局InfoBar被遮罩压住看不见，状态必须画在Sheet里
+                                testStatus = "通了，模型说：${r.take(40)}" to InfoSeverity.success
                                 onDone("连通正常", InfoSeverity.success)
                             } catch (e: Exception) {
-                                onDone("不通: ${e.message}", InfoSeverity.error)
+                                testStatus = "不通 · ${e.message ?: e::class.java.simpleName}" to InfoSeverity.error
                             } finally {
                                 testing = false
                             }
@@ -343,8 +347,21 @@ fun SettingsSheet(
                 androidx.compose.material3.Button(onClick = {
                     cfg.baseUrl = base.trim(); cfg.apiKey = key.trim(); cfg.model = model.trim(); cfg.format = fmt
                     cfg.save(ctx)
+                    testStatus = "已保存" to InfoSeverity.success
                     onDone("已保存", InfoSeverity.success)
                 }) { Text("保存") }
+            }
+            testStatus?.let { (text, sev) ->
+                Text(
+                    text,
+                    fontSize = 12.sp,
+                    color = when (sev) {
+                        InfoSeverity.success -> cs.primary
+                        InfoSeverity.error -> cs.error
+                        else -> cs.onSurfaceVariant
+                    },
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
 
             Spacer(Modifier.height(20.dp))

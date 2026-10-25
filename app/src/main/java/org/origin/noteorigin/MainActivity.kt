@@ -40,6 +40,7 @@ import org.origin.noteorigin.data.DayNote
 import org.origin.noteorigin.data.Store
 import org.origin.noteorigin.data.Txn
 import org.origin.noteorigin.ui.AddTxnSheet
+import org.origin.noteorigin.ui.AssistantSheet
 import org.origin.noteorigin.ui.InfoBarHost
 import org.origin.noteorigin.ui.InfoBarMsg
 import org.origin.noteorigin.ui.InfoSeverity
@@ -83,6 +84,7 @@ private fun Root() {
     var noteEdit by remember { mutableStateOf<DayNote?>(null) }
     var noteOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
+    var assistantOpen by remember { mutableStateOf(false) }
 
     val rm = reduceMotion()
 
@@ -135,6 +137,7 @@ private fun Root() {
                                 noteEdit = DayNote(date = d, content = "", createdAt = 0)
                                 noteOpen = true
                             },
+                            onOpenAssistant = { assistantOpen = true },
                             onOpenSettings = { settingsOpen = true },
                         )
                         1 -> NotesHub(
@@ -199,6 +202,13 @@ private fun Root() {
                 onDismiss = { noteOpen = false },
             )
         }
+    }
+    if (assistantOpen) {
+        AssistantSheet(
+            store = store,
+            onDone = { t, s -> notify(t, s) },
+            onDismiss = { assistantOpen = false },
+        )
     }
     if (settingsOpen) {
         SettingsSheet(

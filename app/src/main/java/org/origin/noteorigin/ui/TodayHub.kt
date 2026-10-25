@@ -56,6 +56,7 @@ fun TodayHub(
     onOpenNotes: () -> Unit,
     onOpenLedger: () -> Unit,
     onWriteNote: (String) -> Unit,
+    onOpenAssistant: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     var quote by remember { mutableStateOf<Quote?>(null) }
@@ -95,6 +96,12 @@ fun TodayHub(
                     fontWeight = FontWeight.Medium,
                     color = cs.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "AI",
+                    fontSize = AppType.meta, fontWeight = FontWeight.SemiBold,
+                    color = cs.primary,
+                    modifier = Modifier.clickable { onOpenAssistant() }.padding(8.dp),
                 )
                 Text(
                     "设置",
