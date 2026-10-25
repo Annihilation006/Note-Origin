@@ -1,4 +1,8 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package org.origin.noteorigin
+
+import androidx.compose.material3.ExperimentalMaterial3Api
 
 import android.content.Context
 import android.os.Build
@@ -21,10 +25,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DynamicLightColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -77,9 +81,9 @@ fun NoteOriginApp() {
 
     // Material You 动态取色（Android 12+ 取壁纸色，低版本回退默认浅色）
     val colorScheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        DynamicLightColorScheme(context)
+        dynamicLightColorScheme(context)
     } else {
-        LightColorScheme()
+        lightColorScheme()
     }
 
     MaterialTheme(colorScheme = colorScheme) {
