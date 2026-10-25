@@ -78,8 +78,8 @@ class _AddTxnPageState extends State<AddTxnPage> {
     }
     final store = context.read<AppStore>();
     // 账户不选默认第一个
-    final acc = _accId ?? (store.accs.isNotEmpty ? store.accs.first.id : 0);
-    if (acc == 0) {
+    final acc = _accId ?? (store.accs.isNotEmpty ? store.accs.first.id : null);
+    if (acc == null || acc == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('没有可用账户，去设置里加一个')),
       );
@@ -94,7 +94,7 @@ class _AddTxnPageState extends State<AddTxnPage> {
         type: _type,
         amountCents: cents,
         categoryId: _catId!,
-        accountId: acc,
+        accountId: acc!,
         date: todayStr(_date),
         note: _noteCtrl.text.trim(),
         createdAt: old?.createdAt ?? DateTime.now().millisecondsSinceEpoch,

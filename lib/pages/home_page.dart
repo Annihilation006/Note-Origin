@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/store.dart';
+import '../models/models.dart';
 import '../utils/fmt.dart';
 import 'add_txn_page.dart';
 
@@ -117,7 +118,7 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  Widget _daySection(BuildContext context, AppStore store, String date, List txns) {
+  Widget _daySection(BuildContext context, AppStore store, String date, List<Txn> txns) {
     var dayExp = 0;
     for (final t in txns) {
       if (t.type == 0) dayExp += t.amountCents;

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' hide Category;
 
 import '../models/models.dart';
 import 'db.dart';
@@ -165,7 +165,7 @@ class AppStore extends ChangeNotifier {
 
   /// 每天支出序列，画柱状图
   List<int> dailyExpenseSeries() {
-    final days = DateUtils.daysInMonth(month.year, month.month);
+    final days = DateTime(month.year, month.month + 1, 0).day; // 算当月天数的老套路
     final list = List<int>.filled(days, 0);
     for (final t in monthTxns) {
       if (t.type != 0) continue;

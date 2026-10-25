@@ -156,12 +156,12 @@ class _NotesPageState extends State<NotesPage> {
     }
     return Column(
       children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 4),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
             children: [
               for (final w in ['一', '二', '三', '四', '五', '六', '日'])
-                Expanded(child: Center(child: Text(w, style: TextStyle(fontSize: 12, color: Colors.grey)))),
+                Expanded(child: Center(child: Text(w, style: const TextStyle(fontSize: 12, color: Colors.grey)))),
             ],
           ),
         ),

@@ -1,7 +1,6 @@
 import '../models/models.dart';
 
 /// 零碎的格式化函数都扔这
-library;
 
 String fmtMoney(int cents, {bool symbol = true}) {
   final neg = cents < 0;
