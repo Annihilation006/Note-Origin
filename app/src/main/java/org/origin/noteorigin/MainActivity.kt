@@ -109,8 +109,9 @@ private fun Root() {
                 )
             }
         },
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
     ) { pad ->
-        Box(Modifier.fillMaxSize().padding(pad)) {
+        Box(Modifier.fillMaxSize().padding(bottom = pad.calculateBottomPadding())) {
             SharedTransitionLayout {
                 AnimatedContent(
                     targetState = tab,

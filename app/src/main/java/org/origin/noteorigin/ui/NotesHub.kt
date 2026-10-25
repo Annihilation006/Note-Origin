@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -71,7 +74,10 @@ fun NotesHub(
     Column(Modifier.fillMaxSize()) {
         // 顶栏：月切换
         Row(
-            Modifier.fillMaxWidth().padding(top = 40.dp, start = 20.dp, end = 12.dp),
+            Modifier.fillMaxWidth().padding(
+                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp,
+                start = 20.dp, end = 12.dp,
+            ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("笔记", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = cs.onSurface, modifier = Modifier.weight(1f))

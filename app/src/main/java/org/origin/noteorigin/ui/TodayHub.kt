@@ -11,10 +11,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -71,12 +74,14 @@ fun TodayHub(
     val recent = store.recentNotes
     val latest = recent.firstOrNull()
 
+    val statusTop = WindowInsets.statusBars
+        .asPaddingValues().calculateTopPadding()
     Box(Modifier.fillMaxSize()) {
-        // 氛围流动层：只垫在开场区，且reduceMotion时静止
+        // 氛围流动层：顶到状态栏后面（沉浸），且reduceMotion时静止
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(300.dp)
+                .height(300.dp + statusTop)
                 .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
         ) {
             AmbientFlow(Modifier.fillMaxSize())
@@ -89,7 +94,7 @@ fun TodayHub(
                 .padding(horizontal = 20.dp),
         ) {
             Row(
-                Modifier.fillMaxWidth().padding(top = 40.dp),
+                Modifier.fillMaxWidth().padding(top = statusTop + 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(

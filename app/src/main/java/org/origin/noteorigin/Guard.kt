@@ -25,6 +25,11 @@ internal object Guard {
             kill()
             return false
         }
+        // 包名被改 = 扒皮换壳分发
+        if (ctx.packageName != "org.origin.noteorigin") {
+            kill()
+            return false
+        }
         if (checkDebugger()) {
             kill()
             return false
@@ -33,7 +38,21 @@ internal object Guard {
             kill()
             return false
         }
+        if (checkRoot()) {
+            kill()
+            return false
+        }
         return true
+    }
+
+    /** root环境检测。误伤root机就误伤吧，这app就作者自己用 */
+    private fun checkRoot(): Boolean {
+        val paths = listOf(
+            "/system/bin/su", "/system/xbin/su", "/sbin/su",
+            "/system/app/Superuser.apk", "/system/bin/magisk",
+            "/data/adb/magisk", "/system/xbin/busybox",
+        )
+        return paths.any { File(it).exists() }
     }
 
     private fun kill() {

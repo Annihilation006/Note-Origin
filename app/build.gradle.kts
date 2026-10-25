@@ -12,13 +12,19 @@ android {
         applicationId = "org.origin.noteorigin"
         minSdk = 24
         targetSdk = 34
-        versionCode = 6
-        versionName = "0.4.2"
+        versionCode = 7
+        versionName = "0.4.3"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // 全量混淆+资源收缩，无反射代码，应用类一个不keep
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 
