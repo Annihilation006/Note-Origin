@@ -147,7 +147,7 @@ private fun RecordsPage(store: Store, onEditTxn: (Txn?) -> Unit, onInfo: (String
                 ) {
                     Text(day, fontSize = AppType.meta, fontWeight = FontWeight.SemiBold, color = cs.onSurface)
                     Spacer(Modifier.weight(1f))
-                    Text("支出 ${fmtMoney(list.filter { it.type == 0 }.sumOf { it.amountCents })}", fontSize = AppType.meta, color = cs.onSurfaceVariant)
+                    Text("支出 ${fmtMoney(list.filter { it.type == 0 && it.currency == "CNY" }.sumOf { it.amountCents })}", fontSize = AppType.meta, color = cs.onSurfaceVariant)
                 }
             }
             items(list, key = { it.id ?: it.createdAt }) { t ->
@@ -156,6 +156,7 @@ private fun RecordsPage(store: Store, onEditTxn: (Txn?) -> Unit, onInfo: (String
                     Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
+                        .animateItem()
                         .combinedClickable(
                             onClick = { onEditTxn(t) },
                             onLongClick = {
@@ -176,7 +177,7 @@ private fun RecordsPage(store: Store, onEditTxn: (Txn?) -> Unit, onInfo: (String
                         }
                     }
                     Text(
-                        (if (t.type == 0) "-" else "+") + fmtMoney(t.amountCents),
+                        (if (t.type == 0) "-" else "+") + fmtMoney(t.amountCents, currency = t.currency),
                         fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
                         color = if (t.type == 0) cs.onSurface else cs.primary,
                     )
@@ -265,7 +266,10 @@ private fun StatsPage(store: Store) {
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(fmtMoney(total), fontSize = AppType.figure, fontWeight = FontWeight.Bold, color = cs.onSurface)
-                        Text("共支出", fontSize = 10.sp, color = cs.onSurfaceVariant)
+                        Text(
+                            if (store.foreignSums.isEmpty()) "共支出（¥）" else "共支出（¥）· 另有外币未计入",
+                            fontSize = 10.sp, color = cs.onSurfaceVariant,
+                        )
                     }
                 }
             }

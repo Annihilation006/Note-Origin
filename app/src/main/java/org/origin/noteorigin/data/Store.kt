@@ -124,16 +124,23 @@ class Store(private val ctx: Context) {
 
     // ---- 统计 ----
 
-    val monthExpense: Long get() = monthTxns.filter { it.type == 0 }.sumOf { it.amountCents }
-    val monthIncome: Long get() = monthTxns.filter { it.type == 1 }.sumOf { it.amountCents }
+    // 统计默认只计主币种（CNY），外币单独列一笔，不然汇率不折算没法加
+    private val primary = "CNY"
+    val monthExpense: Long get() = monthTxns.filter { it.type == 0 && it.currency == primary }.sumOf { it.amountCents }
+    val monthIncome: Long get() = monthTxns.filter { it.type == 1 && it.currency == primary }.sumOf { it.amountCents }
+    val foreignSums: Map<String, Long>
+        get() = monthTxns.filter { it.currency != primary }
+            .groupBy { it.currency }
+            .mapValues { (_, l) -> l.filter { it.type == 0 }.sumOf { it.amountCents } }
+            .filterValues { it > 0 }
     val today: String get() = LocalDate.now().toString()
 
     val todayExpense: Long
-        get() = monthTxns.filter { it.type == 0 && it.date == today }.sumOf { it.amountCents }
+        get() = monthTxns.filter { it.type == 0 && it.date == today && it.currency == primary }.sumOf { it.amountCents }
     val todayTxnCount: Int get() = monthTxns.count { it.date == today }
 
     fun expenseByCategory(): List<Pair<Category?, Long>> =
-        monthTxns.filter { it.type == 0 }
+        monthTxns.filter { it.type == 0 && it.currency == primary }
             .groupBy { it.categoryId }
             .map { (cid, list) -> catById[cid] to list.sumOf { it.amountCents } }
             .sortedByDescending { it.second }
@@ -141,7 +148,7 @@ class Store(private val ctx: Context) {
     fun dailyExpense(): List<Long> {
         val days = month.lengthOfMonth()
         val out = LongArray(days)
-        for (t in monthTxns) if (t.type == 0) {
+        for (t in monthTxns) if (t.type == 0 && t.currency == primary) {
             val d = t.date.takeLast(2).toIntOrNull() ?: continue
             if (d in 1..days) out[d - 1] += t.amountCents
         }
@@ -155,9 +162,10 @@ class Store(private val ctx: Context) {
     fun monthSummaryText(): String = buildString {
         appendLine("${month.year}年${month.monthValue}月账单：")
         appendLine("总支出：${fmtMoney(monthExpense)}，总收入：${fmtMoney(monthIncome)}")
+        foreignSums.forEach { (c, v) -> appendLine("另有 $c 支出 ${fmtMoney(v, currency = c)}（未计入上图）") }
         appendLine("明细（日期 | 类型 | 金额 | 备注）：")
         monthTxns.take(200).forEach {
-            appendLine("${it.date} | ${if (it.type == 0) "支出" else "收入"} | ${fmtMoney(it.amountCents)}${if (it.note.isEmpty()) "" else " | ${it.note}"}")
+            appendLine("${it.date} | ${if (it.type == 0) "支出" else "收入"} | ${fmtMoney(it.amountCents, currency = it.currency)}${if (it.note.isEmpty()) "" else " | ${it.note}"}")
         }
     }
 }

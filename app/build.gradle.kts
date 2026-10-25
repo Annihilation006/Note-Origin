@@ -10,10 +10,10 @@ android {
 
     defaultConfig {
         applicationId = "org.origin.noteorigin"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.4.1"
+        versionCode = 6
+        versionName = "0.4.2"
     }
 
     buildTypes {
@@ -25,6 +25,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // java.time在API26以下要靠desugar，minSdk 24（安卓7）需要
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {
         jvmTarget = "17"
@@ -35,6 +37,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     val composeBom = platform("androidx.compose:compose-bom:2025.01.00")
     implementation(composeBom)
 

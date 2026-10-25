@@ -10,6 +10,7 @@ data class Txn(
     val date: String,        // yyyy-MM-dd
     val note: String = "",
     val createdAt: Long,
+    val currency: String = "CNY",
 )
 
 data class Category(

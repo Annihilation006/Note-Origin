@@ -6,7 +6,15 @@ import java.time.LocalDate
 
 /** 金额/日期/导出工具，语义与Flutter版一致（按分存，不碰浮点累计） */
 
-fun fmtMoney(cents: Long, symbol: Boolean = true): String {
+// 支持的币种。记账为主，够用就行，要加往表里塞
+val CURRENCIES = linkedMapOf(
+    "CNY" to "¥", "USD" to "$", "EUR" to "€",
+    "GBP" to "£", "JPY" to "¥", "KRW" to "₩", "HKD" to "HK$",
+)
+
+fun symbolOf(currency: String): String = CURRENCIES[currency] ?: currency
+
+fun fmtMoney(cents: Long, symbol: Boolean = true, currency: String = "CNY"): String {
     val neg = cents < 0
     val v = kotlin.math.abs(cents) / 100.0
     var s = String.format("%.2f", v)
@@ -19,7 +27,10 @@ fun fmtMoney(cents: Long, symbol: Boolean = true): String {
         if (remain > 0 && remain % 3 == 0) sb.append(',')
     }
     s = sb.toString() + s.substring(dot)
-    return "${if (neg) "-" else ""}${if (symbol) "¥" else ""}$s"
+    val sym = if (symbol) symbolOf(currency) else ""
+    // 非人民币带上代码避免¥混淆
+    return if (currency == "JPY") "${if (neg) "-" else ""}$sym$s"
+    else "${if (neg) "-" else ""}$sym$s${if (currency != "CNY" && currency !in listOf("USD","EUR","GBP","KRW","HKD")) " $currency" else ""}"
 }
 
 fun parseMoneyToCents(input: String): Long? {

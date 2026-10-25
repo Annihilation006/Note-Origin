@@ -70,6 +70,7 @@ fun AddTxnSheet(
     var catId by remember { mutableStateOf(editing?.categoryId ?: (store.cats.firstOrNull { it.type == (editing?.type ?: 0) }?.id ?: 0L)) }
     var accId by remember { mutableStateOf(editing?.accountId ?: (store.accs.firstOrNull()?.id ?: 0L)) }
     var date by remember { mutableStateOf(editing?.date ?: todayStr()) }
+    var currency by remember { mutableStateOf(editing?.currency ?: "CNY") }
     var note by remember { mutableStateOf(editing?.note ?: "") }
     var showDate by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -92,11 +93,25 @@ fun AddTxnSheet(
                 onValueChange = { amount = it.filter { c -> c.isDigit() || c == '.' }.take(12) },
                 textStyle = androidx.compose.ui.text.TextStyle(fontSize = 30.sp, fontWeight = FontWeight.Bold),
                 label = { Text("金额") },
-                prefix = { Text("¥", fontSize = 22.sp) },
+                prefix = { Text(org.origin.noteorigin.util.symbolOf(currency), fontSize = 22.sp) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Spacer(Modifier.height(8.dp))
+
+            // 币种。默认¥，出国消费切一下就行
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                org.origin.noteorigin.util.CURRENCIES.forEach { (code, sym) ->
+                    androidx.compose.material3.FilterChip(
+                        selected = currency == code,
+                        onClick = { currency = code },
+                        label = { Text(if (code == "CNY") "$sym 人民币" else "$sym $code", fontSize = 12.sp) },
+                    )
+                }
+            }
             Spacer(Modifier.height(12.dp))
 
             // 分类：芯片网格
@@ -180,6 +195,7 @@ fun AddTxnSheet(
                                 id = editing?.id, type = type, amountCents = cents,
                                 categoryId = catId, accountId = accId, date = date, note = note.trim(),
                                 createdAt = editing?.createdAt ?: System.currentTimeMillis(),
+                                currency = currency,
                             )
                         )
                         onDone(if (editing == null) "已记下" else "已更新", InfoSeverity.success)
@@ -220,15 +236,63 @@ fun NoteEditSheet(
     val scope = rememberCoroutineScope()
     val cs = MaterialTheme.colorScheme
     var content by remember { mutableStateOf(editing.content) }
+    var aiTopic by remember { mutableStateOf("") }
+    var aiBusy by remember { mutableStateOf(false) }
+    var aiStatus by remember { mutableStateOf<String?>(null) }
+    val ctx2 = androidx.compose.ui.platform.LocalContext.current
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
             Text("${editing.date} 的笔记", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = cs.onSurface)
             Spacer(Modifier.height(12.dp))
+
+            // AI写文：给个主题让它起稿，或对已写的润色。产出进输入框，自己改完再存
+            OutlinedTextField(
+                value = aiTopic,
+                onValueChange = { aiTopic = it },
+                label = { Text("AI 写作（主题或要求，可空）") },
+                placeholder = { Text("比如：写一段关于今天的日记") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !aiBusy,
+            )
+            Row(modifier = Modifier.padding(top = 6.dp)) {
+                TextButton(
+                    onClick = {
+                        if (aiBusy) return@TextButton
+                        val cfg = AiConfig.load(ctx2)
+                        if (!cfg.ready) { aiStatus = "先在设置里填 API Key"; return@TextButton }
+                        val mode = if (content.isBlank() && aiTopic.isBlank()) { aiStatus = "给个主题，或者先写两句让它润色"; return@TextButton } else if (content.isBlank()) "draft" else "polish"
+                        aiBusy = true; aiStatus = "写ing…"
+                        scope.launch {
+                            try {
+                                val sys = when (mode) {
+                                    "draft" -> "把用户给的主题写成一段日记式笔记，第一人称，口语自然，80字以内，只输出正文。"
+                                    else -> "润色用户已写的笔记，保留原意和第一人称口吻，修正错字让句子顺一点，只输出正文。"
+                                }
+                                val user = if (mode == "draft") aiTopic else content
+                                content = Ai.chat(cfg, user, system = sys)
+                                aiStatus = null
+                            } catch (e: Exception) {
+                                aiStatus = "失败 · ${e.message}"
+                            } finally {
+                                aiBusy = false
+                            }
+                        }
+                    },
+                    enabled = !aiBusy,
+                ) { Text(if (aiBusy) "…" else if (content.isBlank()) "AI 起稿" else "AI 润色", fontSize = 13.sp) }
+                aiStatus?.let {
+                    Text(it, fontSize = 12.sp, color = if (it.startsWith("失败")) cs.error else cs.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 10.dp, top = 12.dp))
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+
             OutlinedTextField(
                 value = content,
                 onValueChange = { content = it },
-                minLines = 4, maxLines = 8,
+                minLines = 4, maxLines = 10,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("这一天发生了什么…") },
             )

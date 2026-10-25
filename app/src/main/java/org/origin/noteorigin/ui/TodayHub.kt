@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,6 +41,7 @@ import org.origin.noteorigin.ui.theme.AppType
 import org.origin.noteorigin.ui.theme.GlassCard
 import org.origin.noteorigin.ui.theme.MassBlock
 import org.origin.noteorigin.ui.theme.Motion
+import org.origin.noteorigin.ui.theme.pressScale
 import org.origin.noteorigin.ui.theme.reduceMotion
 import org.origin.noteorigin.util.fmtMoney
 import java.time.LocalDate
@@ -136,33 +138,51 @@ fun TodayHub(
                     Modifier
                         .fillMaxWidth()
                         .sharedElement(rememberSharedContentState("money"), av)
-                        .height(96.dp),
+                        .heightIn(min = 100.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    val ia1 = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                     MassBlock(
                         Modifier
                             .weight(0.58f)
-                            .clickable { onOpenLedger() },
+                            .pressScale(ia1)
+                            .clickable(interactionSource = ia1, indication = null) { onOpenLedger() },
                         tonal = cs.secondaryContainer,
                     ) {
-                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.Center) {
-                            Text("本月支出", fontSize = AppType.meta, color = cs.onSecondaryContainer)
+                        Column(
+                            Modifier.padding(horizontal = 14.dp, vertical = 12.dp).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text("本月支出", fontSize = AppType.meta, lineHeight = 14.sp, color = cs.onSecondaryContainer)
+                            // 数字缩小一档，行距收紧，保证第三行收入不被截断
                             Text(
                                 fmtMoney(store.monthExpense),
-                                fontSize = AppType.figure, fontWeight = FontWeight.SemiBold,
+                                fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold,
                                 color = cs.onSecondaryContainer,
+                                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             )
                             Text(
                                 "收入 ${fmtMoney(store.monthIncome)}",
-                                fontSize = AppType.meta,
+                                fontSize = AppType.meta, lineHeight = 14.sp,
                                 color = cs.onSecondaryContainer.copy(alpha = 0.75f),
+                                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             )
+                            if (store.foreignSums.isNotEmpty()) {
+                                Text(
+                                    store.foreignSums.entries.joinToString(" · ") { (c, v) -> "${fmtMoney(v, currency = c)}" },
+                                    fontSize = 11.sp, lineHeight = 13.sp,
+                                    color = cs.onSecondaryContainer.copy(alpha = 0.65f),
+                                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                     }
+                    val ia2 = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                     MassBlock(
                         Modifier
                             .weight(0.42f)
-                            .clickable { onOpenLedger() },
+                            .pressScale(ia2)
+                            .clickable(interactionSource = ia2, indication = null) { onOpenLedger() },
                         tonal = cs.surfaceContainerHighest,
                     ) {
                         Column(

@@ -149,7 +149,7 @@ fun InfoBarHost(msg: InfoBarMsg?, onShown: () -> Unit, modifier: Modifier = Modi
     }
     AnimatedVisibility(
         visible = msg != null,
-        enter = slideInVertically(tween(Motion.normal, easing = Motion.emphasized)) { -it } + fadeIn(tween(Motion.fast)),
+        enter = slideInVertically(tween(240, easing = Motion.emphasized)) { -it } + fadeIn(tween(Motion.fast)),
         exit = slideOutVertically(tween(Motion.fast)) { -it } + fadeOut(tween(Motion.fast)),
         modifier = modifier,
     ) {

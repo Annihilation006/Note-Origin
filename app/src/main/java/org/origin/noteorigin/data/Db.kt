@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 /** 表结构与Flutter版sqflite库逐列一致，以后两版数据可互通 */
-class Db(ctx: Context) : SQLiteOpenHelper(ctx.applicationContext, "note_origin.db", null, 1) {
+class Db(ctx: Context) : SQLiteOpenHelper(ctx.applicationContext, "note_origin.db", null, 2) {
 
     companion object {
         @Volatile private var inst: Db? = null
@@ -24,7 +24,8 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx.applicationContext, "note_origin.d
               account_id INTEGER NOT NULL,
               date TEXT NOT NULL,
               note TEXT,
-              created_at INTEGER NOT NULL
+              created_at INTEGER NOT NULL,
+              currency TEXT NOT NULL DEFAULT 'CNY'
             )
         """)
         db.execSQL("CREATE INDEX idx_txns_date ON txns(date)")
@@ -53,7 +54,10 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx.applicationContext, "note_origin.d
     }
 
     override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) {
-        // 目前只有v1
+        if (o < 2) {
+            // v2: 加币种列，老数据默认CNY
+            db.execSQL("ALTER TABLE txns ADD COLUMN currency TEXT NOT NULL DEFAULT 'CNY'")
+        }
     }
 
     private fun seed(db: SQLiteDatabase) {
@@ -86,17 +90,18 @@ class Db(ctx: Context) : SQLiteOpenHelper(ctx.applicationContext, "note_origin.d
     // ---- txns ----
 
     fun txnsOfMonth(ym: String): List<Txn> = read("SELECT * FROM txns WHERE date LIKE ? ORDER BY date DESC, created_at DESC", arrayOf("$ym-%")) { c ->
-        Txn(c.getLong(0), c.getInt(1), c.getLong(2), c.getLong(3), c.getLong(4), c.getString(5), c.getString(6) ?: "", c.getLong(7))
+        Txn(c.getLong(0), c.getInt(1), c.getLong(2), c.getLong(3), c.getLong(4), c.getString(5), c.getString(6) ?: "", c.getLong(7), if (c.columnCount > 8) c.getString(8) ?: "CNY" else "CNY")
     }
 
     fun allTxns(): List<Txn> = read("SELECT * FROM txns ORDER BY date DESC, created_at DESC", arrayOf()) { c ->
-        Txn(c.getLong(0), c.getInt(1), c.getLong(2), c.getLong(3), c.getLong(4), c.getString(5), c.getString(6) ?: "", c.getLong(7))
+        Txn(c.getLong(0), c.getInt(1), c.getLong(2), c.getLong(3), c.getLong(4), c.getString(5), c.getString(6) ?: "", c.getLong(7), if (c.columnCount > 8) c.getString(8) ?: "CNY" else "CNY")
     }
 
     fun saveTxn(t: Txn) {
         val v = cv(
             "type" to t.type, "amount_cents" to t.amountCents, "category_id" to t.categoryId,
             "account_id" to t.accountId, "date" to t.date, "note" to t.note, "created_at" to t.createdAt,
+            "currency" to t.currency,
         )
         if (t.id == null) writableDatabase.insert("txns", null, v)
         else writableDatabase.update("txns", v, "id=?", arrayOf(t.id.toString()))

@@ -27,12 +27,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalDensity
 
@@ -226,6 +228,22 @@ private fun DrawScope.drawAmbient(phase: Float, primary: Color, tertiary: Color,
         ),
         radius = w * 0.65f, center = c2,
     )
+}
+
+
+/** 按压反馈：按下缩到0.97（慢些），松开弹回（快些），不对称才像物理 */
+@Composable
+fun Modifier.pressScale(interaction: androidx.compose.foundation.interaction.MutableInteractionSource): Modifier {
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = if (pressed)
+            androidx.compose.animation.core.tween(160, easing = Motion.standard)
+        else
+            androidx.compose.animation.core.spring(dampingRatio = 0.55f, stiffness = 900f),
+        label = "press",
+    )
+    return this.then(Modifier.graphicsLayer { scaleX = scale; scaleY = scale })
 }
 
 /** 图表配色：从scheme的三个彩色角色做明度/色相轮转派生，不引入外部色 */
