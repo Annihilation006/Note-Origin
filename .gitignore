@@ -1,0 +1,13 @@
+.dart_tool/
+.packages
+build/
+*.iml
+.idea/
+android/.gradle/
+android/local.properties
+ios/Pods/
+linux/flutter/ephemeral/
+windows/flutter/ephemeral/
+macos/Flutter/ephemeral/
+aharmonyos/
+*.apk
