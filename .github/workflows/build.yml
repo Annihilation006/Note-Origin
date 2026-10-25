@@ -11,9 +11,7 @@ jobs:
       run: |
         echo "=== Before cleanup ==="
         df -h /
-        # 删除预装但用不到的大块头
         sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android/sdk/ndk  # 用 buildozer 自己下的 r25b
         sudo rm -rf /opt/ghc
         sudo rm -rf /usr/local/.ghcup
         sudo rm -rf /opt/hostedtoolcache/CodeQL
@@ -45,16 +43,14 @@ jobs:
       run: |
         curl -L -O https://download.swift.org/swiftly/linux/swiftly-x86_64.tar.gz
         tar zxf swiftly-x86_64.tar.gz
-        ./swiftly init --quiet-shell-followup --no-modify-profile
+        ./swiftly init --skip-install --quiet-shell-followup --no-modify-profile
 
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
         export PATH="$HOME/.local/bin:$PATH"
         source "$HOME/.local/share/swiftly/env.sh"
 
-        # 只装 snapshot，跳过顺带装的 6.3.2 stable
-        swiftly install 6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a --assume-yes --skip-install || true
-        swiftly install 6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a --assume-yes || true
+        swiftly install 6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a --assume-yes
         swiftly use 6.3-DEVELOPMENT-SNAPSHOT-2026-01-03-a
 
         swift --version
@@ -79,7 +75,6 @@ jobs:
         echo "SDK path: $REAL_SDK_PATH"
 
         chmod +x "$SETUP_SCRIPT"
-        # Swift 编译用系统 NDK（已清理旧 NDK，这里用环境变量里的新版）
         bash "$SETUP_SCRIPT" "$ANDROID_NDK_LATEST_HOME"
 
         SWIFT_LIB_DIR="$REAL_SDK_PATH/swift-resources/usr/lib/swift-aarch64/android"
@@ -99,7 +94,7 @@ jobs:
         ln -sf "$NDK_BUILTINS" "$SWIFT_CLANG_LIB/libclang_rt.builtins.a"
         ln -sf "$NDK_UNWIND" "$SWIFT_CLANG_LIB/libunwind.a"
 
-        NDK_LLD="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld"
+        NDK_LLD="$NDK_PREBUILT/bin/ld.lld"
 
         swiftc -emit-library \
           -target aarch64-unknown-linux-android31 \
@@ -112,21 +107,57 @@ jobs:
 
         cp "$SWIFT_LIB_DIR"/lib*.so .
 
-        # 编译完删掉 SDK 压缩包和非 aarch64 的库，节省空间
-        rm -rf sdk-temp/*/swift-resources/usr/lib/swift-armv7
-        rm -rf sdk-temp/*/swift-resources/usr/lib/swift-x86_64
-        rm -rf sdk-temp/*/swift-resources/usr/lib/swift_static-*
+        # Swift 运行时依赖 NDK 的 libc++_shared.so，一并拷出来
+        LIBCXX=$(find "$NDK_PREBUILT/sysroot" -name "libc++_shared.so" | grep aarch64 | head -n 1 || true)
+        if [ -n "$LIBCXX" ]; then
+          cp "$LIBCXX" .
+        else
+          echo "WARN: libc++_shared.so not found in NDK"
+        fi
+
+        # 删除用不到的架构，节省空间
+        rm -rf "$REAL_SDK_PATH/swift-resources/usr/lib/swift-armv7" \
+               "$REAL_SDK_PATH/swift-resources/usr/lib/swift-x86_64" \
+               "$REAL_SDK_PATH/swift-resources/usr/lib/swift_static-"*
 
         echo "=== Built files ==="
-        ls *.so
-        df -h /
+        ls -la *.so
         echo "Swift 6.3 Core Built Success!"
+
+    - name: Check Swift lib dependencies
+      run: |
+        echo "=== liblogic.so NEEDED ==="
+        readelf -d liblogic.so | grep NEEDED || true
+
+        echo "=== Missing dependencies ==="
+        SYSTEM_LIBS=" libc.so libm.so libdl.so liblog.so libz.so libandroid.so libEGL.so libGLESv2.so libOpenSLES.so libnativewindow.so libjnigraphics.so "
+        for f in *.so; do
+          for dep in $(readelf -d "$f" 2>/dev/null | sed -n 's/.*(NEEDED).*\[\(.*\)\].*/\1/p'); do
+            [ -f "$dep" ] && continue
+            case "$SYSTEM_LIBS" in *" $dep "*) continue ;; esac
+            echo "MISSING: $dep (needed by $f)"
+          done
+        done
+        echo "=== Check done ==="
+
+    - name: Upload Swift libs
+      uses: actions/upload-artifact@v4
+      with:
+        name: swift-libs-arm64
+        path: "*.so"
 
     - name: Build with Buildozer
       run: |
         pip install --user buildozer cython==3.0.11
         export PATH=$PATH:$HOME/.local/bin
         yes | buildozer android debug
+
+    - name: Verify Swift libs in APK
+      run: |
+        APK=$(ls bin/*.apk | head -n 1)
+        echo "APK: $APK"
+        unzip -l "$APK" | grep -E "liblogic|libswift|libFoundation|libdispatch|libBlocks|libc\+\+_shared" \
+          || echo "!!! Swift libs NOT found in APK"
 
     - name: Upload APK
       uses: actions/upload-artifact@v4

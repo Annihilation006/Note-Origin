@@ -1,50 +1,32 @@
-import ctypes, ctypes.util, httpx, asyncio, threading, os
+import os
+import ctypes
+import ctypes.util
+import asyncio
+import threading
+import traceback
+
+import httpx
 from kivy.utils import platform
-from kivymd.app import MDApp
+from kivy.clock import mainthread
 from kivy.lang import Builder
-from kivy.clock import Clock, mainthread
+from kivy.logger import Logger
+from kivy.core.window import Window
 from kivy.storage.jsonstore import JsonStore
+from kivy.uix.label import Label
+
+from kivymd.app import MDApp
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDRaisedButton
 from kivymd.uix.textfield import MDTextField
-
-# 加载 Swift 内核与 C 标准库
-# 修复：Android 上 .so 不在当前目录，需要动态定位
-def _load_lib():
-    if platform == 'android':
-        # p4a 打包后 .so 在应用私有目录
-        base = os.path.dirname(os.path.abspath(__file__))
-        candidates = [
-            os.path.join(base, "liblogic.so"),
-            "/data/data/org.origin.noteorigin/files/app/liblogic.so",
-        ]
-        for p in candidates:
-            if os.path.exists(p):
-                return ctypes.CDLL(p)
-        return None
-    else:
-        return ctypes.CDLL("./liblogic.so")
-
-try:
-    lib = _load_lib()
-    if lib:
-        lib.execute_data_purge.restype = ctypes.c_char_p
-    libc = ctypes.CDLL(ctypes.util.find_library("c"))
-except Exception as e:
-    lib = None
-    libc = None
-    print(f"[WARN] Failed to load liblogic.so: {e}")
+from kivymd.uix.pickers import MDDatePicker
 
 KV = '''
 MDScreen:
-    md_bg_color: self.theme_cls.backgroundColor
     MDBoxLayout:
         orientation: "vertical"
         MDTopAppBar:
             title: "Note Origin"
-            md_bg_color: self.theme_cls.primary_color
             right_action_items: [["cog", lambda x: app.show_settings()], ["calendar", lambda x: app.show_calendar()]]
-        
         MDBoxLayout:
             padding: "20dp"
             MDLabel:
@@ -52,138 +34,104 @@ MDScreen:
                 text: "Select a date to decrypt..."
                 halign: "center"
                 theme_text_color: "Primary"
-        
         MDCard:
             size_hint: (0.9, None)
             height: "120dp"
             pos_hint: {"center_x": .5}
             padding: "15dp"
-            md_bg_color: self.theme_cls.primary_color[0:3] + [0.1]
             MDLabel:
                 id: ai_box
                 text: "AI Insight will appear here..."
                 theme_text_color: "Secondary"
 '''
 
-class NoteOriginApp(MDApp):
-    store = JsonStore('secure_config.json')
+NATIVE_ERR = None  # 原生库加载失败的原因，会显示在界面上
 
-    def build(self):
-        self.theme_cls.theme_style = "Dark"
-        if platform == 'android':
-            self.sync_monet()
-        return Builder.load_string(KV)
 
-    @mainthread
-    def sync_monet(self):
-        """动态提取 Android 壁纸颜色"""
+def _load_libc():
+    names = ["libc.so", "libc.so.6"]
+    try:
+        found = ctypes.util.find_library("c")
+        if found:
+            names.append(found)
+    except Exception:
+        pass
+    for name in names:
+        try:
+            libc = ctypes.CDLL(name)
+            libc.free.argtypes = [ctypes.c_void_p]
+            libc.free.restype = None
+            return libc
+        except (OSError, AttributeError):
+            continue
+    return None
+
+
+def _load_native_lib():
+    """依次尝试加载 liblogic.so，全部失败返回 None。"""
+    global NATIVE_ERR
+    candidates = []
+
+    if platform == 'android':
+        # add_libs 打进 APK 的 .so 在 nativeLibraryDir 里，这是最可靠的路径
         try:
             from jnius import autoclass
-            Activity = autoclass('org.kivy.android.PythonActivity').mActivity
-            WM = autoclass('android.app.WallpaperManager').getInstance(Activity)
-            colors = WM.getWallpaperColors(1)
-            if colors:
-                c = colors.getPrimaryColor()
-                self.theme_cls.primary_color = [c.red(), c.green(), c.blue(), 1]
+            activity = autoclass('org.kivy.android.PythonActivity').mActivity
+            native_dir = activity.getApplicationInfo().nativeLibraryDir
+            candidates.append(os.path.join(native_dir, 'liblogic.so'))
         except Exception as e:
-            print(f"[WARN] Monet sync failed: {e}")
+            NATIVE_ERR = f"nativeLibraryDir lookup failed: {e}"
 
-    def show_settings(self):
-        curr_key = self.store.get('api')['key'] if self.store.exists('api') else ""
-        self.key_input = MDTextField(text=curr_key, hint_text="SiliconFlow API Key")
-        self.dialog = MDDialog(title="Safety Settings", type="custom", content_cls=self.key_input,
-                               buttons=[MDRaisedButton(text="SAVE", on_release=self.save_key)])
-        self.dialog.open()
+    candidates.append('liblogic.so')
+    candidates.append(os.path.abspath('./liblogic.so'))
 
-    def save_key(self, *args):
-        self.store.put('api', key=self.key_input.text)
-        self.dialog.dismiss()
+    errors = []
+    for path in candidates:
+        try:
+            lib = ctypes.CDLL(path)
+            fn = lib.execute_data_purge  # 符号不存在会抛 AttributeError
+            fn.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+            fn.restype = ctypes.c_void_p
+            return lib
+        except (OSError, AttributeError) as e:
+            errors.append(f"{path}: {e}")
 
-    def show_calendar(self):
-        from kivymd.uix.pickers import MDDatePicker
-        picker = MDDatePicker()
-        picker.bind(on_save=self.on_date_selected)
-        picker.open()
+    msg = "\n".join(errors)
+    NATIVE_ERR = f"{NATIVE_ERR}\n{msg}" if NATIVE_ERR else msg
+    return None
 
-    def on_date_selected(self, instance, value, date_range):
-        date_str = value.strftime("%Y-%m-%d")
-        if not lib:
-            self.root.ids.content.text = "Error: native library not loaded."
-            return
-        # 调用 Swift 内核并手动释放内存
-        raw_ptr = lib.execute_data_purge(date_str.encode(), b"zh")
-        if raw_ptr:
-            res_str = ctypes.string_at(raw_ptr).decode()
-            if libc:
-                libc.free(raw_ptr)
-            # XOR 还原
-            real_note = "".join([chr(ord(c) ^ 0x07) for c in res_str])
-            self.root.ids.content.text = f"Decrypted: {real_note}"
-            # 修复：asyncio.run() 会阻塞主线程，改用子线程
-            threading.Thread(
-                target=lambda: asyncio.run(self.ask_qwen(real_note)),
-                daemon=True
-            ).start()
 
-    async def ask_qwen(self, note_text):
-        if not self.store.exists('api'):
-            return
-        api_key = self.store.get('api')['key']
-        async with httpx.AsyncClient() as client:
-            try:
-                r = await client.post(
-                    "https://api.siliconflow.cn/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    json={"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": note_text}]},
-                    timeout=12.0
-                )
-                summary = r.json()['choices'][0]['message']['content']
-                Clock.schedule_once(lambda dt: self.update_ai_ui(summary))
-            except Exception as e:
-                print(f"[WARN] AI request failed: {e}")
+NATIVE_LIB = _load_native_lib()
+LIBC = _load_libc()
 
-    def update_ai_ui(self, text):
-        self.root.ids.ai_box.text = f"Qwen: {text}"
-
-NoteOriginApp().run()
-            size_hint: (0.9, None)
-            height: "120dp"
-            pos_hint: {"center_x": .5}
-            padding: "15dp"
-            md_bg_color: self.theme_cls.primary_color[0:3] + [0.1]
-            MDLabel:
-                id: ai_box
-                text: "AI Insight will appear here..."
-                theme_text_color: "Secondary"
-'''
 
 class NoteOriginApp(MDApp):
-    store = JsonStore('secure_config.json')
 
     def build(self):
-        self.theme_cls.theme_style = "Dark"
-        if platform == 'android': self.sync_monet()
-        return Builder.load_string(KV)
-
-    @mainthread
-    def sync_monet(self):
-        """动态提取 Android 壁纸颜色"""
+        self.theme_cls.theme_style = "Light"
+        self.store = JsonStore(os.path.join(self.user_data_dir, "secure_config.json"))
         try:
-            from jnius import autoclass
-            Activity = autoclass('org.kivy.android.PythonActivity').mActivity
-            WM = autoclass('android.app.WallpaperManager').getInstance(Activity)
-            colors = WM.getWallpaperColors(1)
-            if colors:
-                c = colors.getPrimaryColor()
-                # 归一化处理
-                self.theme_cls.primary_color = [c.red(), c.green(), c.blue(), 1]
-        except: pass
+            return Builder.load_string(KV)
+        except Exception:
+            err = traceback.format_exc()
+            Logger.error("NoteOrigin build: " + err)
+            return Label(
+                text="Startup failed:\n" + err,
+                font_size="12sp",
+                halign="left",
+                valign="top",
+                text_size=(Window.width - 40, None),
+            )
 
     def show_settings(self):
-        curr_key = self.store.get('api')['key'] if self.store.exists('api') else ""
-        self.key_input = MDTextField(text=curr_key, hint_text="SiliconFlow API Key")
-        self.dialog = MDDialog(title="Safety Settings", type="custom", content_cls=self.key_input,
-                               buttons=[MDRaisedButton(text="SAVE", on_release=self.save_key)])
+        curr = self.store.get('api')['key'] if self.store.exists('api') else ""
+        self.key_input = MDTextField(text=curr, hint_text="SiliconFlow API Key")
+        self.dialog = MDDialog(
+            title="Settings",
+            type="custom",
+            content_cls=self.key_input,
+            buttons=[MDRaisedButton(text="SAVE", on_release=self.save_key)],
+        )
         self.dialog.open()
 
     def save_key(self, *args):
@@ -191,40 +139,67 @@ class NoteOriginApp(MDApp):
         self.dialog.dismiss()
 
     def show_calendar(self):
-        from kivymd.uix.pickers import MDDatePicker
         picker = MDDatePicker()
         picker.bind(on_save=self.on_date_selected)
         picker.open()
 
     def on_date_selected(self, instance, value, date_range):
+        content = self.root.ids.content
         date_str = value.strftime("%Y-%m-%d")
-        # 1. 调用 Swift 内核并手动释放内存
-        raw_ptr = lib.execute_data_purge(date_str.encode(), b"zh")
-        if raw_ptr:
-            res_str = ctypes.string_at(raw_ptr).decode()
-            libc.free(raw_ptr) 
-            # XOR 还原
-            real_note = "".join([chr(ord(c) ^ 0x07) for c in res_str])
-            self.root.ids.content.text = f"Decrypted: {real_note}"
-            # 2. 异步 AI 请求
-            Clock.schedule_once(lambda dt: asyncio.run(self.ask_qwen(real_note)))
+
+        if NATIVE_LIB is None:
+            content.text = "Native core not loaded:\n" + (NATIVE_ERR or "unknown error")
+            return
+
+        try:
+            ptr = NATIVE_LIB.execute_data_purge(date_str.encode("utf-8"), b"zh")
+            if not ptr:
+                content.text = "Native core returned NULL"
+                return
+
+            raw = ctypes.string_at(ptr).decode("utf-8", errors="replace")
+            if LIBC is not None:
+                LIBC.free(ptr)
+
+            real_note = "".join(chr(ord(c) ^ 0x07) for c in raw)
+            content.text = f"Decrypted: {real_note}"
+
+            threading.Thread(target=self._ask_worker, args=(real_note,), daemon=True).start()
+        except Exception:
+            content.text = "Decrypt error:\n" + traceback.format_exc()[-400:]
+
+    def _ask_worker(self, note_text):
+        try:
+            asyncio.run(self.ask_qwen(note_text))
+        except Exception:
+            Logger.error("NoteOrigin AI worker: " + traceback.format_exc())
 
     async def ask_qwen(self, note_text):
-        if not self.store.exists('api'): return
-        api_key = self.store.get('api')['key']
-        async with httpx.AsyncClient() as client:
-            try:
+        cfg = self.store.get('api') if self.store.exists('api') else {}
+        api_key = cfg.get('key', '')
+        if not api_key:
+            self.update_ai_ui("API key not set (tap the gear icon)")
+            return
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 r = await client.post(
                     "https://api.siliconflow.cn/v1/chat/completions",
                     headers={"Authorization": f"Bearer {api_key}"},
-                    json={"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": note_text}]},
-                    timeout=12.0
+                    json={
+                        "model": "Qwen/Qwen2.5-7B-Instruct",
+                        "messages": [{"role": "user", "content": note_text}],
+                    },
                 )
+                r.raise_for_status()
                 summary = r.json()['choices'][0]['message']['content']
-                Clock.schedule_once(lambda dt: self.update_ai_ui(summary))
-            except: pass
+                self.update_ai_ui(summary)
+        except Exception as e:
+            self.update_ai_ui(f"AI request failed: {e}")
 
+    @mainthread
     def update_ai_ui(self, text):
         self.root.ids.ai_box.text = f"Qwen: {text}"
+
 
 NoteOriginApp().run()
