@@ -7,6 +7,7 @@ import '../models/models.dart';
 import '../services/quote_service.dart';
 import '../ui/tokens.dart';
 import '../utils/fmt.dart';
+import 'assistant_page.dart';
 
 /// 首页。编辑部式的开场，信息从用户真实数据来，没有东西就不硬凑
 class TodayPage extends StatefulWidget {
@@ -123,6 +124,13 @@ class _TodayPageState extends State<TodayPage> {
               onPressed: () => widget.onNavigate(1),
               child: const Text('写笔记'),
             ),
+            IconButton(
+              icon: const Icon(Icons.auto_awesome_outlined),
+              tooltip: 'AI 助手',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AssistantPage()),
+              ),
+            ),
           ],
         ),
         if (latest == null)
@@ -167,7 +175,7 @@ class _TodayPageState extends State<TodayPage> {
             child: InkWell(
               onTap: () => widget.onNavigate(2),
               child: Container(
-                padding: const EdgeInsets.all(Sp.l),
+                padding: const EdgeInsets.symmetric(horizontal: Sp.l, vertical: Sp.m),
                 decoration: BoxDecoration(
                   color: cs.secondaryContainer,
                   borderRadius: BorderRadius.circular(6),
@@ -178,9 +186,11 @@ class _TodayPageState extends State<TodayPage> {
                   children: [
                     Text('本月支出', style: Ty.meta.apply(color: cs.onSecondaryContainer)),
                     const SizedBox(height: Sp.xs),
+                    // 数字缩小一档防截断
                     Text(
                       fmtMoney(store.monthExpenseCents),
-                      style: Ty.figure.apply(color: cs.onSecondaryContainer),
+                      style: const TextStyle(fontSize: 20, height: 1.2, fontWeight: FontWeight.w600)
+                          .apply(color: cs.onSecondaryContainer),
                     ),
                     const SizedBox(height: Sp.xs),
                     Text(
@@ -198,7 +208,7 @@ class _TodayPageState extends State<TodayPage> {
             child: InkWell(
               onTap: () => widget.onNavigate(2),
               child: Container(
-                padding: const EdgeInsets.all(Sp.l),
+                padding: const EdgeInsets.symmetric(horizontal: Sp.l, vertical: Sp.m),
                 decoration: BoxDecoration(
                   color: cs.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(6),

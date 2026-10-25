@@ -2,7 +2,7 @@ name: note_origin
 description: 记账 + 日历笔记 + AI 助手，一套代码跑安卓/iOS/鸿蒙/桌面
 publish_to: 'none'
 
-version: 0.3.1+4
+version: 0.3.2+5
 
 environment:
   sdk: '>=3.2.0 <4.0.0'

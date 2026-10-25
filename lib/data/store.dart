@@ -132,6 +132,13 @@ class AppStore extends ChangeNotifier {
     await reloadMonth(); // 简单粗暴，不做增量刷新了
   }
 
+  Future<void> saveNote(DayNote n) async {
+    try {
+      await _db.saveNote(n);
+    } catch (_) {}
+    notifyListeners();
+  }
+
   Future<void> deleteTxn(int id) async {
     await _db.deleteTxn(id);
     await reloadMonth();
@@ -170,18 +177,30 @@ class AppStore extends ChangeNotifier {
 
   // ---------- 统计（都是现算，数据量小无所谓） ----------
 
+  // 统计只计主币种CNY，外币单列（不折汇率没法加和）
   int get monthExpenseCents {
     var s = 0;
     for (final t in monthTxns) {
-      if (t.type == 0) s += t.amountCents;
+      if (t.type == 0 && t.currency == 'CNY') s += t.amountCents;
     }
     return s;
+  }
+
+  Map<String, int> get foreignSums {
+    final m = <String, int>{};
+    for (final t in monthTxns) {
+      if (t.type == 0 && t.currency != 'CNY') {
+        m[t.currency] = (m[t.currency] ?? 0) + t.amountCents;
+      }
+    }
+    m.removeWhere((_, v) => v == 0);
+    return m;
   }
 
   int get monthIncomeCents {
     var s = 0;
     for (final t in monthTxns) {
-      if (t.type == 1) s += t.amountCents;
+      if (t.type == 1 && t.currency == 'CNY') s += t.amountCents;
     }
     return s;
   }

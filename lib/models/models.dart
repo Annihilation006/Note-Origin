@@ -10,6 +10,7 @@ class Txn {
   final String date; // YYYY-MM-DD
   final String note;
   final int createdAt;
+  final String currency; // 币种代码，默认CNY
 
   Txn({
     this.id,
@@ -20,6 +21,7 @@ class Txn {
     required this.date,
     this.note = '',
     required this.createdAt,
+    this.currency = 'CNY',
   });
 
   Txn copyWith({
@@ -31,6 +33,7 @@ class Txn {
     String? date,
     String? note,
     int? createdAt,
+    String? currency,
   }) {
     return Txn(
       id: id ?? this.id,
@@ -41,6 +44,7 @@ class Txn {
       date: date ?? this.date,
       note: note ?? this.note,
       createdAt: createdAt ?? this.createdAt,
+      currency: currency ?? this.currency,
     );
   }
 
@@ -55,6 +59,7 @@ class Txn {
       date: (m['date'] as String?) ?? '',
       note: (m['note'] as String?) ?? '',
       createdAt: (m['created_at'] as int?) ?? 0,
+      currency: (m['currency'] as String?) ?? 'CNY',
     );
   }
 
@@ -68,6 +73,7 @@ class Txn {
       'date': date,
       'note': note,
       'created_at': createdAt,
+      'currency': currency,
     };
   }
 }

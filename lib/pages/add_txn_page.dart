@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../data/store.dart';
 import '../models/models.dart';
 import '../utils/fmt.dart';
+// fmt里的currencies在这页直接用
 
 /// 记一笔 / 编辑一笔
 class AddTxnPage extends StatefulWidget {
@@ -23,6 +24,7 @@ class _AddTxnPageState extends State<AddTxnPage> {
   late DateTime _date;
   int? _catId;
   int? _accId;
+  String _currency = 'CNY';
   bool _saving = false;
 
   @override
@@ -36,6 +38,7 @@ class _AddTxnPageState extends State<AddTxnPage> {
       _date = DateTime.tryParse(e.date) ?? DateTime.now();
       _catId = e.categoryId;
       _accId = e.accountId;
+      _currency = e.currency;
     } else {
       _type = 0;
       _date = DateTime.now();
@@ -98,6 +101,7 @@ class _AddTxnPageState extends State<AddTxnPage> {
         date: todayStr(_date),
         note: _noteCtrl.text.trim(),
         createdAt: old?.createdAt ?? DateTime.now().millisecondsSinceEpoch,
+        currency: _currency,
       );
       await store.saveTxn(t);
       if (mounted) Navigator.pop(context);
@@ -135,6 +139,18 @@ class _AddTxnPageState extends State<AddTxnPage> {
             },
           ),
           const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final e in currencies.entries)
+                ChoiceChip(
+                  label: Text(e.key == 'CNY' ? '${e.value} 人民币' : '${e.value} ${e.key}', style: const TextStyle(fontSize: 12)),
+                  selected: _currency == e.key,
+                  onSelected: (_) => setState(() => _currency = e.key),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
           TextField(
             controller: _amountCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),

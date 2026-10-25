@@ -83,7 +83,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const ListTile(
             leading: Icon(Icons.info_outline),
             title: Text('Note Origin'),
-            subtitle: Text('v0.3.1 · Flutter 跨平台版\n安卓/iOS/鸿蒙/Windows/macOS/Linux'),
+            subtitle: Text('v0.3.2 · Flutter 跨平台版\n安卓/iOS/鸿蒙/Windows/macOS/Linux'),
             isThreeLine: true,
           ),
         ],

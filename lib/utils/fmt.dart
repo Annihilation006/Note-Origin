@@ -2,7 +2,13 @@ import '../models/models.dart';
 
 /// 零碎的格式化函数都扔这
 
-String fmtMoney(int cents, {bool symbol = true}) {
+const currencies = {
+  'CNY': '¥', 'USD': r'$', 'EUR': '€', 'GBP': '£', 'JPY': '¥', 'KRW': '₩', 'HKD': 'HK\$',
+};
+
+String symbolOf(String c) => currencies[c] ?? c;
+
+String fmtMoney(int cents, {bool symbol = true, String currency = 'CNY'}) {
   final neg = cents < 0;
   final v = (cents.abs()) / 100.0;
   var s = v.toStringAsFixed(2);
@@ -20,7 +26,7 @@ String fmtMoney(int cents, {bool symbol = true}) {
   }
   s = buf.toString();
   if (parts.length > 1) s += '.${parts[1]}';
-  return '${neg ? '-' : ''}${symbol ? '¥' : ''}$s';
+  return '${neg ? '-' : ''}${symbol ? symbolOf(currency) : ''}' + s;
 }
 
 /// 解析用户输入的金额字符串成分。解析不了返回null，让上层提示。

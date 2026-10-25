@@ -34,7 +34,7 @@ class Db {
     return sqflite.databaseFactory.openDatabase(
       file,
       options: sqflite.OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onCreate: (db, v) async {
           // 一把建完，省得以后升级迁移写得痛苦（虽然迟早要写）
           await db.execute('''
@@ -46,7 +46,8 @@ class Db {
               account_id INTEGER NOT NULL,
               date TEXT NOT NULL,
               note TEXT,
-              created_at INTEGER NOT NULL
+              created_at INTEGER NOT NULL,
+              currency TEXT NOT NULL DEFAULT 'CNY'
             )
           ''');
           await db.execute('CREATE INDEX idx_txns_date ON txns(date)');
@@ -81,6 +82,12 @@ class Db {
             )
           ''');
           await _seed(db);
+        },
+        onUpgrade: (db, oldV, newV) async {
+          if (oldV < 2) {
+            // v2: 币种列，老数据默认CNY
+            await db.execute("ALTER TABLE txns ADD COLUMN currency TEXT NOT NULL DEFAULT 'CNY'");
+          }
         },
       ),
     );

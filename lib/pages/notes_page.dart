@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/db.dart';
+import '../services/ai_service.dart';
 import '../models/models.dart';
 import '../utils/fmt.dart';
 
@@ -179,20 +180,65 @@ class _NotesPageState extends State<NotesPage> {
 
   Future<void> _editNote(DayNote? old) async {
     final ctrl = TextEditingController(text: old?.content ?? '');
+    var aiBusy = false;
+    var aiErr = '';
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(old == null ? '记笔记 · $todayStr(_selected)' : '编辑笔记'),
-        content: TextField(
-          controller: ctrl,
-          maxLines: 5,
-          autofocus: old == null,
-          decoration: const InputDecoration(hintText: '这一天发生了什么…'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          title: Text(old == null ? '记笔记 · $todayStr(_selected)' : '编辑笔记'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: ctrl,
+                maxLines: 5,
+                autofocus: old == null,
+                decoration: const InputDecoration(hintText: '这一天发生了什么…'),
+              ),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: aiBusy
+                        ? null
+                        : () async {
+                            // AI写文：没内容就起稿（拿对话框里已有的字当主题），有内容就润色
+                            final cfg = await AiConfig.load();
+                            if (!cfg.ready) {
+                              setDlg(() => aiErr = '先在设置里填 API Key');
+                              return;
+                            }
+                            final src = ctrl.text.trim();
+                            setDlg(() { aiBusy = true; aiErr = ''; });
+                            try {
+                              final sys = src.isEmpty
+                                  ? '把用户给的主题写成一段日记式笔记，第一人称，口语自然，80字以内，只输出正文。'
+                                  : '润色用户已写的笔记，保留原意和第一人称口吻，修正错字让句子顺一点，只输出正文。';
+                              final topic = src.isEmpty ? '今天的一天' : src;
+                              final r = await AiService.chat(cfg, topic, system: sys);
+                              ctrl.text = r;
+                            } catch (e) {
+                              setDlg(() => aiErr = '失败: $e');
+                            } finally {
+                              setDlg(() => aiBusy = false);
+                            }
+                          },
+                    child: Text(aiBusy ? '…' : (ctrl.text.trim().isEmpty ? 'AI 起稿' : 'AI 润色')),
+                  ),
+                  if (aiErr.isNotEmpty)
+                    Expanded(
+                      child: Text(aiErr, style: const TextStyle(fontSize: 11, color: Colors.redAccent),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('保存')),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('保存')),
-        ],
       ),
     );
     final text = ctrl.text.trim();
