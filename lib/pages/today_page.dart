@@ -19,13 +19,16 @@ class TodayPage extends StatefulWidget {
 }
 
 class _TodayPageState extends State<TodayPage> {
-  final _quotes = LocalQuoteProvider();
+  final _quotes = QuoteService();
   List<DayNote> _recent = [];
+  Future<Quote?>? _quoteFuture;
   int _todayNoteCount = 0;
 
   @override
   void initState() {
     super.initState();
+    // future放initState里建好，别在build里反复发请求
+    _quoteFuture = _quotes.quoteFor(DateTime.now());
     _loadRecent();
   }
 
@@ -76,7 +79,7 @@ class _TodayPageState extends State<TodayPage> {
 
             // ---- 每日一句 ----
             FutureBuilder<Quote?>(
-              future: _quotes.pick(now),
+              future: _quoteFuture,
               builder: (context, snap) {
                 final q = snap.data;
                 if (q == null) return const SizedBox.shrink();

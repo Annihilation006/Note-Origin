@@ -24,11 +24,13 @@
 - 一天可记多条，随时补充
 
 **AI 助手**
-- 兼容各类 OpenAI 风格接口（硅基流动 / DeepSeek / OpenAI / 本地部署均可）
+- 支持三种接口格式：OpenAI 兼容 / Anthropic Messages / Gemini generateContent
+- 硅基流动、DeepSeek、OpenAI、Claude、Gemini、本地 Ollama / vLLM 均可接入
 - 自定义 Base URL、API Key、模型名，一键测试连通
 - AI 月度消费报告：消费习惯总结、省钱建议、下月预算参考
 
 **其他**
+- 今日页每日一句（Hitokoto 一言，无网络时自动切本地句库）
 - CSV 导出（Excel 可直接打开）
 - 深色模式，Android 12+ 跟随壁纸动态取色
 - 数据全部本地存储

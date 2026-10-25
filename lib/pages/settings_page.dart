@@ -83,7 +83,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const ListTile(
             leading: Icon(Icons.info_outline),
             title: Text('Note Origin'),
-            subtitle: Text('v0.2.0 · Flutter 跨平台版\n安卓/iOS/鸿蒙/Windows/macOS/Linux'),
+            subtitle: Text('v0.3.0 · Flutter 跨平台版\n安卓/iOS/鸿蒙/Windows/macOS/Linux'),
             isThreeLine: true,
           ),
         ],
@@ -174,6 +174,7 @@ class _AiConfigPageState extends State<AiConfigPage> {
   late final TextEditingController _base;
   late final TextEditingController _key;
   late final TextEditingController _model;
+  ApiFormat _fmt = ApiFormat.openai;
   bool _testing = false;
   bool _obscure = true;
 
@@ -183,6 +184,7 @@ class _AiConfigPageState extends State<AiConfigPage> {
     _base = TextEditingController(text: widget.cfg.baseUrl);
     _key = TextEditingController(text: widget.cfg.apiKey);
     _model = TextEditingController(text: widget.cfg.model);
+    _fmt = widget.cfg.format;
   }
 
   @override
@@ -199,7 +201,8 @@ class _AiConfigPageState extends State<AiConfigPage> {
     final probe = AiConfig()
       ..baseUrl = _base.text
       ..apiKey = _key.text
-      ..model = _model.text;
+      ..model = _model.text
+      ..format = _fmt;
     try {
       final r = await AiService.ping(probe);
       if (!mounted) return;
@@ -216,7 +219,8 @@ class _AiConfigPageState extends State<AiConfigPage> {
     widget.cfg
       ..baseUrl = _base.text.trim()
       ..apiKey = _key.text.trim()
-      ..model = _model.text.trim();
+      ..model = _model.text.trim()
+      ..format = _fmt;
     await widget.cfg.save();
     if (mounted) Navigator.pop(context);
   }
@@ -228,13 +232,23 @@ class _AiConfigPageState extends State<AiConfigPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('任何 OpenAI 兼容接口都能用（硅基流动 / DeepSeek / OpenAI / 本地 Ollama 等）',
-              style: TextStyle(fontSize: 12, color: Colors.grey)),
+          SegmentedButton<ApiFormat>(
+            segments: [
+              for (final f in ApiFormat.values) ButtonSegment(value: f, label: Text(f.label)),
+            ],
+            selected: {_fmt},
+            onSelectionChanged: (s) => setState(() {
+              _fmt = s.first;
+              // 切格式时提示跟着换，已有地址不像这个格式的就带过去
+              _base.text = _fmt.baseHint;
+              _model.text = _fmt.modelHint;
+            }),
+          ),
           const SizedBox(height: 12),
           TextField(
             controller: _base,
-            decoration: const InputDecoration(
-                labelText: 'API Base URL', hintText: 'https://api.siliconflow.cn/v1', border: OutlineInputBorder()),
+            decoration: InputDecoration(
+                labelText: 'API Base URL', hintText: _fmt.baseHint, border: const OutlineInputBorder()),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -252,8 +266,8 @@ class _AiConfigPageState extends State<AiConfigPage> {
           const SizedBox(height: 12),
           TextField(
             controller: _model,
-            decoration: const InputDecoration(
-                labelText: '模型名', hintText: 'Qwen/Qwen2.5-7B-Instruct', border: OutlineInputBorder()),
+            decoration: InputDecoration(
+                labelText: '模型名', hintText: _fmt.modelHint, border: const OutlineInputBorder()),
           ),
           const SizedBox(height: 20),
           Row(
