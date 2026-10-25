@@ -1,13 +1,16 @@
 package org.origin.noteorigin
 
-import io.flutter.embedding.android.FlutterActivity
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
+
+import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (!BuildConfig.DEBUG) {
-            // release下过一遍检查，debug构建不受影响
+        // debuggable标志位判断，debug构建跳过检查
+        val release = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) == 0
+        if (release) {
             Guard.run(applicationContext)
         }
     }
