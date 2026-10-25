@@ -148,10 +148,10 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!context.mounted) return;
       showDialog(
         context: context,
-        builder: (_) => AlertDialog(
+        builder: (ctx) => AlertDialog(
           title: const Text('导出成功'),
           content: Text('文件在：\n${file.path}'),
-          actions: [TextButton(onPressed: () => Navigator.pop(_), child: const Text('知道啦'))],
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('知道啦'))],
         ),
       );
     } catch (e) {

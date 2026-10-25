@@ -9,10 +9,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'data/db.dart';
 import 'data/store.dart';
-import 'pages/home_page.dart';
+import 'pages/today_page.dart';
 import 'pages/notes_page.dart';
-import 'pages/stats_page.dart';
-import 'pages/budget_page.dart';
+import 'pages/ledger_page.dart';
 import 'pages/settings_page.dart';
 
 // 桌面端要换sqflite的ffi实现，放main里最早做
@@ -85,29 +84,28 @@ class RootScaffold extends StatefulWidget {
 class _RootScaffoldState extends State<RootScaffold> {
   int _tab = 0;
 
-  final _pages = const [
-    HomePage(),
-    StatsPage(),
-    BudgetPage(),
-    NotesPage(),
-    SettingsPage(),
-  ];
+  void _go(int i) => setState(() => _tab = i);
 
   @override
   Widget build(BuildContext context) {
+    // 笔记优先：今日/笔记/账本/设置
     return Scaffold(
       body: IndexedStack(
         index: _tab,
-        children: _pages,
+        children: [
+          TodayPage(onNavigate: _go),
+          const NotesPage(),
+          const LedgerPage(),
+          const SettingsPage(),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
+        onDestinationSelected: _go,
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: '明细'),
-          NavigationDestination(icon: Icon(Icons.pie_chart_outline), selectedIcon: Icon(Icons.pie_chart), label: '统计'),
-          NavigationDestination(icon: Icon(Icons.savings_outlined), selectedIcon: Icon(Icons.savings), label: '预算'),
+          NavigationDestination(icon: Icon(Icons.today_outlined), selectedIcon: Icon(Icons.today), label: '今日'),
           NavigationDestination(icon: Icon(Icons.event_note_outlined), selectedIcon: Icon(Icons.event_note), label: '笔记'),
+          NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet), label: '账本'),
           NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: '设置'),
         ],
       ),

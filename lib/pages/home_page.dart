@@ -144,7 +144,7 @@ class HomePage extends StatelessWidget {
               style: const TextStyle(fontSize: 24),
             ),
             title: Text(store.catById[t.categoryId]?.name ?? '已删除分类'),
-            subtitle: (t.note as String).isEmpty
+            subtitle: t.note.isEmpty
                 ? null
                 : Text(t.note, maxLines: 1, overflow: TextOverflow.ellipsis),
             trailing: Text(

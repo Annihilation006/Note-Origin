@@ -26,7 +26,7 @@ class RemoteSnapshot {
 }
 
 /// 无同步时的空实现
-class OfflineAdapter implements SyncAdapter {
+class OfflineAdapter extends SyncAdapter {
   @override
   String get name => 'offline';
 

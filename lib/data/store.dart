@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' hide Category;
 
 import '../models/models.dart';
 import 'db.dart';
+import '../utils/fmt.dart';
 
 /// 全局状态。一个ChangeNotifier装下所有页面要的东西，
 /// 数据量小（个人记账撑死几千条），偷懒不分store了
@@ -209,6 +210,21 @@ class AppStore extends ChangeNotifier {
       }
     }
     return list;
+  }
+
+  /// 今天的支出（分）。首页那块Metro条用
+  int get todayExpenseCents {
+    final key = todayStr(DateTime.now());
+    var sum = 0;
+    for (final t in monthTxns) {
+      if (t.type == 0 && t.date == key) sum += t.amountCents;
+    }
+    return sum;
+  }
+
+  int get todayTxnCount {
+    final key = todayStr(DateTime.now());
+    return monthTxns.where((t) => t.date == key).length;
   }
 
   /// 按天分组给首页列表

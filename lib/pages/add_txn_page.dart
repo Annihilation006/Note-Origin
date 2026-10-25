@@ -94,7 +94,7 @@ class _AddTxnPageState extends State<AddTxnPage> {
         type: _type,
         amountCents: cents,
         categoryId: _catId!,
-        accountId: acc!,
+        accountId: acc,
         date: todayStr(_date),
         note: _noteCtrl.text.trim(),
         createdAt: old?.createdAt ?? DateTime.now().millisecondsSinceEpoch,

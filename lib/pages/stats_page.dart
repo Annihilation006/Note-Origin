@@ -194,11 +194,11 @@ class StatsPage extends StatelessWidget {
       Navigator.pop(context); // 关loading
       showDialog(
         context: context,
-        builder: (_) => AlertDialog(
+        builder: (ctx) => AlertDialog(
           title: const Text('AI 月报'),
           content: SingleChildScrollView(child: Text(reply)),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(_), child: const Text('好的')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('好的')),
           ],
         ),
       );

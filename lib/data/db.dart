@@ -213,6 +213,13 @@ class Db {
     await db.delete('day_notes', where: 'id=?', whereArgs: [id]);
   }
 
+  /// 最近编辑的笔记，给首页"继续写"用
+  Future<List<DayNote>> recentNotes({int limit = 5}) async {
+    final db = await get();
+    final rows = await db.query('day_notes', orderBy: 'created_at DESC', limit: limit);
+    return rows.map(DayNote.fromMap).toList();
+  }
+
   // ---- budgets ----
 
   Future<List<Budget>> budgets() async {
