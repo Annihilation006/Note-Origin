@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'secret_box.dart';
+
 /// AI 接入层。OpenAI兼容的chat接口，硅基流动/DeepSeek/OpenAI都能填
 /// 配置存在SharedPreferences里，key下面这几个
 class AiConfig {
@@ -21,7 +23,7 @@ class AiConfig {
     try {
       final sp = await SharedPreferences.getInstance();
       cfg.baseUrl = sp.getString(kBaseUrl) ?? cfg.baseUrl;
-      cfg.apiKey = sp.getString(kApiKey) ?? '';
+      cfg.apiKey = SecretBox.unseal(sp.getString(kApiKey) ?? '');
       cfg.model = sp.getString(kModel) ?? cfg.model;
     } catch (_) {}
     return cfg;
@@ -31,7 +33,7 @@ class AiConfig {
     try {
       final sp = await SharedPreferences.getInstance();
       await sp.setString(kBaseUrl, baseUrl);
-      await sp.setString(kApiKey, apiKey);
+      await sp.setString(kApiKey, SecretBox.seal(apiKey));
       await sp.setString(kModel, model);
     } catch (_) {
       // 存不上就算了，内存里还有

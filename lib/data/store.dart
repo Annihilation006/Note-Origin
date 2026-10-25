@@ -32,11 +32,45 @@ class AppStore extends ChangeNotifier {
     loading = true;
     notifyListeners();
     try {
-      await Future.wait([_reloadCats(), _reloadAccs(), _reloadBudgets()]);
+      await _bootCheck();
       await reloadMonth();
     } finally {
       loading = false;
       notifyListeners();
+    }
+  }
+
+  /// 启动自检，哪步出问题记到 bootIssues。
+  /// 数据库彻底打不开之外的事都不阻断启动
+  List<String> bootIssues = [];
+
+  Future<void> _bootCheck() async {
+    bootIssues = [];
+    try {
+      await _db.get(); // 顺手触发建库
+    } catch (e) {
+      bootIssues.add('数据库打不开: $e');
+      return; // 库都没起来，后面查了也白查
+    }
+    try {
+      await _reloadCats();
+      if (cats.isEmpty) bootIssues.add('分类为空');
+    } catch (e) {
+      bootIssues.add('分类读取失败: $e');
+    }
+    try {
+      await _reloadAccs();
+      if (accs.isEmpty) bootIssues.add('账户为空');
+    } catch (e) {
+      bootIssues.add('账户读取失败: $e');
+    }
+    try {
+      await _reloadBudgets();
+    } catch (e) {
+      bootIssues.add('预算读取失败: $e');
+    }
+    if (bootIssues.isNotEmpty) {
+      debugPrint('boot check: $bootIssues'); // 要不要上屏展示以后再说
     }
   }
 
