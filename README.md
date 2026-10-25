@@ -24,8 +24,8 @@
 - 一天可记多条，随时补充
 
 **AI 助手**
-- 支持三种接口格式：OpenAI 兼容 / Anthropic Messages / Gemini generateContent
-- 硅基流动、DeepSeek、OpenAI、Claude、Gemini、本地 Ollama / vLLM 均可接入
+- 支持三种接口格式：OpenAI Chat Completions 兼容 / Anthropic Messages / OpenAI Responses
+- 硅基流动、DeepSeek、各类 OpenAI 兼容中转、Claude、OpenAI 均可接入；Gemini 可走其 OpenAI 兼容端点
 - 自定义 Base URL、API Key、模型名，一键测试连通
 - AI 月度消费报告：消费习惯总结、省钱建议、下月预算参考
 

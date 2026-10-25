@@ -83,7 +83,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const ListTile(
             leading: Icon(Icons.info_outline),
             title: Text('Note Origin'),
-            subtitle: Text('v0.3.0 · Flutter 跨平台版\n安卓/iOS/鸿蒙/Windows/macOS/Linux'),
+            subtitle: Text('v0.3.1 · Flutter 跨平台版\n安卓/iOS/鸿蒙/Windows/macOS/Linux'),
             isThreeLine: true,
           ),
         ],
@@ -174,7 +174,7 @@ class _AiConfigPageState extends State<AiConfigPage> {
   late final TextEditingController _base;
   late final TextEditingController _key;
   late final TextEditingController _model;
-  ApiFormat _fmt = ApiFormat.openai;
+  ApiFormat _fmt = ApiFormat.chatCompletions;
   bool _testing = false;
   bool _obscure = true;
 
@@ -237,12 +237,8 @@ class _AiConfigPageState extends State<AiConfigPage> {
               for (final f in ApiFormat.values) ButtonSegment(value: f, label: Text(f.label)),
             ],
             selected: {_fmt},
-            onSelectionChanged: (s) => setState(() {
-              _fmt = s.first;
-              // 切格式时提示跟着换，已有地址不像这个格式的就带过去
-              _base.text = _fmt.baseHint;
-              _model.text = _fmt.modelHint;
-            }),
+            // 只切协议，用户已填的地址/key/模型一概不动
+            onSelectionChanged: (s) => setState(() => _fmt = s.first),
           ),
           const SizedBox(height: 12),
           TextField(
