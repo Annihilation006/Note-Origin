@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' hide Category;
 import '../models/models.dart';
 import 'db.dart';
 import '../utils/fmt.dart';
+import '../services/fx_service.dart';
 
 /// 全局状态。一个ChangeNotifier装下所有页面要的东西，
 /// 数据量小（个人记账撑死几千条），偷懒不分store了
@@ -35,6 +36,10 @@ class AppStore extends ChangeNotifier {
     try {
       await _bootCheck();
       await reloadMonth();
+      // 汇率放最后，失败不影响主流程
+      try {
+        fx = await FxService.load();
+      } catch (_) {}
     } finally {
       loading = false;
       notifyListeners();
@@ -195,6 +200,63 @@ class AppStore extends ChangeNotifier {
     }
     m.removeWhere((_, v) => v == 0);
     return m;
+  }
+
+  // ---- 汇率折算视图。fx为null时上层回退foreignSums展示 ----
+  FxRate? fx;
+
+  /// 折CNY后的月支出（含外币）；fx null则只算CNY
+  int get monthExpenseCny {
+    if (fx == null) return monthExpenseCents;
+    var s = 0.0;
+    for (final t in monthTxns) {
+      if (t.type != 0) continue;
+      final v = fx!.toCny(t.amountCents, t.currency);
+      if (v != null) s += v;
+    }
+    return (s * 100).round();
+  }
+
+  /// 折CNY后的月收入
+  int get monthIncomeCny {
+    if (fx == null) return monthIncomeCents;
+    var s = 0.0;
+    for (final t in monthTxns) {
+      if (t.type != 1) continue;
+      final v = fx!.toCny(t.amountCents, t.currency);
+      if (v != null) s += v;
+    }
+    return (s * 100).round();
+  }
+
+  /// 按汇率折算后的分类支出
+  List<MapEntry<Category?, int>> expenseByCategoryCny() {
+    if (fx == null) return expenseByCategory();
+    final sum = <int, double>{};
+    for (final t in monthTxns) {
+      if (t.type != 0) continue;
+      final v = fx!.toCny(t.amountCents, t.currency);
+      if (v == null) continue;
+      sum[t.categoryId] = (sum[t.categoryId] ?? 0) + v;
+    }
+    final out = sum.entries.map((e) => MapEntry(catById[e.key], (e.value * 100).round())).toList();
+    out.sort((a, b) => b.value.compareTo(a.value));
+    return out;
+  }
+
+  /// 折算后的每日支出
+  List<int> dailyExpenseCny() {
+    if (fx == null) return dailyExpenseSeries();
+    final days = DateTime(month.year, month.month + 1, 0).day;
+    final list = List<int>.filled(days, 0);
+    for (final t in monthTxns) {
+      if (t.type != 0) continue;
+      final v = fx!.toCny(t.amountCents, t.currency);
+      if (v == null) continue;
+      final d = int.tryParse(t.date.split('-').last) ?? 0;
+      if (d >= 1 && d <= days) list[d - 1] += (v * 100).round();
+    }
+    return list;
   }
 
   int get monthIncomeCents {

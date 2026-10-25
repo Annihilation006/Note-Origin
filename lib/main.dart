@@ -4,15 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:dynamic_color/dynamic_color.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'data/db.dart' as dbmod;
 import 'data/db.dart';
 import 'data/store.dart';
 import 'pages/today_page.dart';
 import 'pages/notes_page.dart';
 import 'pages/ledger_page.dart';
 import 'pages/settings_page.dart';
+import 'pages/assistant_page.dart';
 
 // 桌面端要换sqflite的ffi实现，放main里最早做
 void _setupDesktopDb() {
@@ -84,7 +85,14 @@ class RootScaffold extends StatefulWidget {
 class _RootScaffoldState extends State<RootScaffold> {
   int _tab = 0;
 
-  void _go(int i) => setState(() => _tab = i);
+  void _go(int i) {
+    // 4是AI助手，不在底导航里，用推页
+    if (i == 4) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AssistantPage()));
+      return;
+    }
+    setState(() => _tab = i);
+  }
 
   @override
   Widget build(BuildContext context) {

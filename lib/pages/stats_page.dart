@@ -14,9 +14,9 @@ class StatsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
     final cs = Theme.of(context).colorScheme;
-    final byCat = store.expenseByCategory();
-    final daily = store.dailyExpenseSeries();
-    final total = store.monthExpenseCents;
+    final byCat = store.expenseByCategoryCny();
+    final daily = store.dailyExpenseCny();
+    final total = store.monthExpenseCny;
 
     return Scaffold(
       appBar: AppBar(
@@ -183,7 +183,10 @@ class StatsPage extends StatelessWidget {
     );
 
     try {
-      final bill = buildMonthSummaryText(store.month.year, store.month.month, store.monthTxns);
+      var bill = buildMonthSummaryText(store.month.year, store.month.month, store.monthTxns);
+      if (store.fx != null) {
+        bill += '\n（外币已按 ${store.fx!.date} 汇率折算为人民币）';
+      }
       final reply = await AiService.chat(
         cfg,
         bill,

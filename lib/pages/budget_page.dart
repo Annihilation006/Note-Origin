@@ -19,7 +19,7 @@ class _BudgetPageState extends State<BudgetPage> {
     final store = context.watch<AppStore>();
     final cs = Theme.of(context).colorScheme;
     final totalBudget = store.budgetOf(0)?.amountCents ?? 0;
-    final spent = store.monthExpenseCents;
+    final spent = store.monthExpenseCny;
     final over = totalBudget > 0 && spent > totalBudget;
 
     return Scaffold(
